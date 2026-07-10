@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comando STEIO · Esteira de Leads (teste)</title>
+<style>
+  :root{--bg:#0a0e1a;--bg2:#0d1220;--card:#121a2e;--line:rgba(255,255,255,.08);--txt:#eaf0ff;--muted:#8a97b8;
+    --accent:#3b82f6;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--teal:#2dd4bf;--purple:#a78bfa;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;font-size:14px}
+  .wrap{max-width:900px;margin:0 auto;padding:16px 14px 80px}
+  a{color:var(--teal)}
+  /* login */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .lcard{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;width:340px;max-width:92vw}
+  .lcard h1{font-size:18px;margin-bottom:4px}.lcard p{color:var(--muted);font-size:12px;margin-bottom:18px}
+  .lcard label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--txt);
+    padding:9px 11px;font:inherit;font-size:14px;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer;font-size:14px}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.g{background:var(--green);color:#04210f}.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+  /* header */
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 16px;flex-wrap:wrap}
+  header h1{font-size:16px;font-weight:800}header .sub{color:var(--muted);font-size:12px}
+  .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .tag{display:inline-block;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:11px;color:var(--muted);margin-right:5px}
+  .icp{font-weight:800;padding:2px 8px;border-radius:6px;font-size:11px}
+  .icp.A{background:rgba(167,139,250,.18);color:var(--purple)}.icp.B{background:rgba(45,212,191,.18);color:var(--teal)}
+  .icp.C{background:rgba(245,158,11,.18);color:var(--amber)}.icp.D{background:rgba(239,68,68,.18);color:var(--red)}.icp.x{background:rgba(138,151,184,.15);color:var(--muted)}
+  /* lead card */
+  .lead{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .lead .top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .lead .nm{font-weight:800;font-size:15px}
+  .lead .meta{color:var(--muted);font-size:12px;margin-top:3px}
+  .toggles{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+  .tg{border:1px solid var(--line);background:var(--bg2);color:var(--muted);border-radius:999px;padding:7px 12px;cursor:pointer;font-size:12.5px;font-weight:600;user-select:none}
+  .tg.on{background:var(--green);color:#04210f;border-color:transparent}
+  .tg.on.red{background:var(--red);color:#fff}.tg.on.amber{background:var(--amber);color:#231a05}.tg.on.blue{background:var(--accent);color:#fff}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .fld label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+  .collapse{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+  .collapse.show{display:block}
+  .row-end{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+  .msg{font-size:12px;color:var(--green);align-self:center}
+  .empty{color:var(--muted);text-align:center;padding:40px}
+  .kgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 4px}
+  .kc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kc .kl{color:var(--muted);font-size:11.5px}.kc .kv{font-size:24px;font-weight:800;margin-top:3px;letter-spacing:-.02em}
+  .kc.g .kv{color:var(--green)}.kc.t .kv{color:var(--teal)}.kc.b .kv{color:var(--accent)}
+  .stitle{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 8px}
+  table.fx{width:100%;border-collapse:collapse;font-size:13px}
+  table.fx th,table.fx td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.fx th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+  table.fx td.n{text-align:right;font-variant-numeric:tabular-nums}
+  .segbtns{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+  .seg{border:1px solid var(--line);background:var(--bg2);color:var(--muted);border-radius:999px;padding:6px 12px;cursor:pointer;font-size:12.5px;font-weight:600}
+  .seg.on{background:var(--accent);color:#fff;border-color:transparent}
+  .warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#f2c98a;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:14px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="lcard">
+    <h1>Comando STEIO</h1>
+    <p>Esteira de Leads · versão de teste</p>
+    <form id="loginForm">
+      <label>Login</label><input name="login" autocomplete="username" required>
+      <label>Senha</label><input name="senha" type="password" autocomplete="current-password" required>
+      <div style="margin-top:16px"><button class="btn" style="width:100%" type="submit" id="lsub">Entrar</button></div>
+      <p id="lmsg" style="color:var(--red);font-size:12px;margin-top:10px"></p>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="wrap" hidden>
+  <header>
+    <div><h1 id="viewTitle">Meus Leads</h1><div class="sub" id="whoami"></div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="badge" id="counter"></span>
+      <button class="btn ghost" id="refresh">↻ Atualizar</button>
+      <button class="btn ghost" id="logout">Sair</button>
+    </div>
+  </header>
+  <div class="warn" id="warn" hidden></div>
+  <div id="list"><div class="empty">Carregando...</div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPA_URL='https://usfqgslpcqftafrbvxzd.supabase.co';
+const SUPA_KEY='sb_publishable_T4aAxGIFncLq_MLEvQ6Nag_0IUnuM6f';
+const SYNC='https://steio.vercel.app/api/dc-leads-sync';
+const $=s=>document.querySelector(s);
+function showErr(t){ const el=$('#lmsg'); if(el){el.style.color='#ef4444';el.textContent=t;} console.error(t); }
+if(!window.supabase){ showErr('Falha ao carregar a biblioteca (Supabase). Verifique a internet e recarregue.'); }
+window.addEventListener('unhandledrejection',e=>showErr('Erro: '+((e.reason&&e.reason.message)||e.reason||'desconhecido')));
+window.addEventListener('error',e=>showErr('Erro JS: '+(e.message||'')));
+const sb=window.supabase.createClient(SUPA_URL,SUPA_KEY);
+let PROFILE=null, CLOSERS=[];
+const MOTIVOS=[['','Motivo (se não avançou)'],['so_investimento','Só quer investimento'],['sem_capital','Sem capital'],['nao_responde','Não responde'],['sem_interesse','Sem interesse'],['numero_errado','Número errado'],['vai_pensar','Vai pensar']];
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const wa=p=>{const d=String(p||'').replace(/\D/g,'');return d?`https://wa.me/${d.length<=11?'55'+d:d}`:null;};
+
+// ---- LOGIN ----
+$('#loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);
+  const login=(f.get('login')||'').trim().toLowerCase(), senha=f.get('senha');
+  const b=$('#lsub');b.disabled=true;b.textContent='...';$('#lmsg').textContent='';
+  try{
+    const {error}=await sb.auth.signInWithPassword({email:login+'@steio.local',password:senha});
+    b.disabled=false;b.textContent='Entrar';
+    if(error){$('#lmsg').style.color='#ef4444';$('#lmsg').textContent='Login/senha inválidos ('+error.message+')';return;}
+    await boot();
+  }catch(err){ b.disabled=false;b.textContent='Entrar'; showErr('Erro no login: '+(err.message||err)); }
+};
+$('#logout').onclick=async()=>{await sb.auth.signOut();location.reload();};
+$('#refresh').onclick=()=>load();
+
+async function boot(){
+ try{
+  const {data:{user}}=await sb.auth.getUser(); if(!user){showErr('Sessão não encontrada, tente entrar de novo.');return;}
+  const {data:p,error:pe}=await sb.from('profiles').select('*').eq('id',user.id).single();
+  if(pe||!p){showErr('Não consegui ler seu perfil'+(pe?': '+pe.message:''));return;}
+  PROFILE=p;
+  const {data:cl}=await sb.from('profiles').select('id,nome').eq('role','closer'); CLOSERS=cl||[];
+  $('#login').hidden=true;$('#app').hidden=false;
+  $('#whoami').textContent=`${p.nome} · ${({sdr:'SDR',social_seller:'Social Seller',closer:'Closer',gestor:'Gestor'})[p.role]||p.role}`;
+  $('#viewTitle').textContent = p.role==='closer' ? 'Minhas Reuniões' : p.role==='gestor' ? 'Todos os leads' : 'Meus Leads';
+  // dispara o sync (novos leads) e carrega
+  fetch(SYNC).then(()=>load()).catch(()=>{});
+  load();
+ }catch(err){ showErr('Erro no boot: '+(err.message||err)); }
+}
+
+async function load(){
+  $('#list').innerHTML='<div class="empty">Carregando...</div>';
+  let q=sb.from('dc_leads').select('*');
+  if(PROFILE.role==='closer') q=q.eq('closer_id',PROFILE.id).order('agendado_em',{ascending:false});
+  else if(PROFILE.role==='gestor') q=q.order('data_chegada',{ascending:false}).limit(300);
+  else q=q.eq('sdr_id',PROFILE.id).order('data_chegada',{ascending:false}).limit(300);
+  const {data,error}=await q;
+  if(error){$('#list').innerHTML='<div class="empty">Erro ao carregar: '+esc(error.message)+'</div>';return;}
+  const leads=data||[];
+  $('#counter').textContent=leads.length+' leads';
+  if(!leads.length){$('#list').innerHTML='<div class="empty">Nenhum lead ainda. Assim que chegarem no RD, aparecem aqui.</div>';return;}
+  if(PROFILE.role==='gestor'){ renderGestor(leads); return; }
+  $('#list').innerHTML='';
+  leads.forEach(l=> $('#list').appendChild(PROFILE.role==='closer'?closerCard(l):sdrCard(l)));
+}
+
+// ---- VISÃO GESTOR (resumo / funil por origem) ----
+let GEST_DIM='funil';
+function renderGestor(leads){
+  const f=p=>leads.filter(p).length;
+  const fat=leads.reduce((a,l)=>a+(Number(l.valor)||0),0);
+  const kc=(l,v,cls)=>`<div class="kc ${cls||''}"><div class="kl">${l}</div><div class="kv">${v}</div></div>`;
+  const DIMN={funil:'Funil',campanha:'Campanha',criativo:'Criativo'};
+  let html='<div class="kgrid">'
+    +kc('Leads',leads.length)+kc('Qualificados',f(l=>l.qualificado),'t')+kc('Responderam',f(l=>l.respondeu))
+    +kc('Agendaram',f(l=>l.agendou),'b')+kc('Compareceram',f(l=>l.compareceu))+kc('Venderam',f(l=>l.vendeu),'g')
+    +kc('Faturamento','R$ '+fat.toLocaleString('pt-BR'),'g')+'</div>';
+  html+='<div class="stitle">Funil por origem</div>';
+  html+='<div class="segbtns">'+['funil','campanha','criativo'].map(d=>`<span class="seg ${GEST_DIM===d?'on':''}" data-d="${d}">${DIMN[d]}</span>`).join('')+'</div>';
+  const by={}; leads.forEach(l=>{const k=(l[GEST_DIM]||'(sem origem)').toString().replace(/\[CADASTRO\] \[LEAD\] /g,'');
+    const b=by[k]||(by[k]={leads:0,qual:0,resp:0,ag:0,comp:0,vend:0,fat:0}); b.leads++;
+    if(l.qualificado)b.qual++; if(l.respondeu)b.resp++; if(l.agendou)b.ag++; if(l.compareceu)b.comp++; if(l.vendeu)b.vend++; b.fat+=Number(l.valor)||0;});
+  const rows=Object.entries(by).sort((a,b)=>b[1].leads-a[1].leads);
+  html+='<div style="overflow-x:auto"><table class="fx"><thead><tr><th>'+DIMN[GEST_DIM]+'</th><th class="n">Leads</th><th class="n">Qualif.</th><th class="n">Resp.</th><th class="n">Agend.</th><th class="n">Compar.</th><th class="n">Vendas</th><th class="n">Fat.</th></tr></thead><tbody>';
+  rows.forEach(([k,b])=>{ html+=`<tr><td>${esc(k)}</td><td class="n">${b.leads}</td><td class="n">${b.qual}</td><td class="n">${b.resp}</td><td class="n">${b.ag}</td><td class="n">${b.comp}</td><td class="n">${b.vend}</td><td class="n">${b.fat?'R$ '+b.fat.toLocaleString('pt-BR'):'-'}</td></tr>`; });
+  html+='</tbody></table></div>';
+  $('#list').innerHTML=html;
+  $('#list').querySelectorAll('.seg').forEach(s=>s.onclick=()=>{GEST_DIM=s.dataset.d; renderGestor(leads);});
+}
+
+function head(l){
+  const icp=l.icp||'x'; const w=wa(l.telefone);
+  return `<div class="top"><div>
+    <div class="nm">${esc(l.nome||'(sem nome)')} <span class="icp ${icp}">${icp==='x'?'?':'ICP '+icp}</span></div>
+    <div class="meta">${w?`<a href="${w}" target="_blank">${esc(l.telefone)}</a> · `:''}${l.funil?`<span class="tag">${esc(l.funil)}</span>`:''}${l.campanha?`<span class="tag">${esc((l.campanha||'').replace(/\[CADASTRO\] \[LEAD\] /g,''))}</span>`:''}${l.criativo?`<span class="tag">🎬 ${esc(l.criativo)}</span>`:''}</div>
+  </div><div class="meta">${(l.data_chegada||'').slice(0,10)}</div></div>`;
+}
+
+// ---- CARD SDR ----
+function sdrCard(l){
+  const d=document.createElement('div');d.className='lead';d.dataset.id=l.id;
+  const motOpts=MOTIVOS.map(m=>`<option value="${m[0]}" ${l.motivo===m[0]?'selected':''}>${m[1]}</option>`).join('');
+  const clOpts='<option value="">Escolher closer...</option>'+CLOSERS.map(c=>`<option value="${c.id}" ${l.closer_id===c.id?'selected':''}>${esc(c.nome)}</option>`).join('');
+  d.innerHTML=head(l)+`
+    <div class="toggles">
+      <span class="tg ${l.atendeu?'on':''}" data-k="atendeu">Atendeu</span>
+      <span class="tg ${l.respondeu?'on':''}" data-k="respondeu">Respondeu</span>
+      <span class="tg ${l.agendou?'on blue':''}" data-k="agendou">Agendou</span>
+      <span class="tg ${l.sdr_status==='parou'?'on red':''}" data-k="parou">Parou de responder</span>
+    </div>
+    <select class="mot" style="${l.agendou?'display:none':''}">${motOpts}</select>
+    <div class="agbox collapse ${l.agendou?'show':''}">
+      <div class="grid2">
+        <div class="fld"><label>Closer</label><select class="closer">${clOpts}</select></div>
+        <div class="fld"><label>Data do agendamento</label><input type="date" class="agdata" value="${l.agendado_em||''}"></div>
+      </div>
+    </div>
+    <div class="collapse show" style="margin-top:12px">
+      <label class="fld" style="color:var(--muted);font-size:11px;margin-bottom:6px;display:block">MAPEAMENTO</label>
+      <div class="grid2">
+        <div class="fld"><label>Perfil</label><input class="m_perfil" value="${esc(l.map_perfil)}" placeholder="incorporador / investidor..."></div>
+        <div class="fld"><label>Capital</label><input class="m_capital" value="${esc(l.map_capital)}"></div>
+        <div class="fld"><label>Terreno</label><input class="m_terreno" value="${esc(l.map_terreno)}"></div>
+        <div class="fld"><label>Quando começar</label><input class="m_quando" value="${esc(l.map_quando)}"></div>
+        <div class="fld"><label>Travamento</label><input class="m_travamento" value="${esc(l.map_travamento)}"></div>
+        <div class="fld"><label>Observações</label><input class="m_obs" value="${esc(l.map_obs)}"></div>
+      </div>
+    </div>
+    <div class="row-end"><span class="msg"></span><button class="btn g save">Salvar</button></div>`;
+  // toggles
+  d.querySelectorAll('.tg').forEach(t=>t.onclick=()=>{
+    const k=t.dataset.k;
+    if(k==='agendou'){ t.classList.toggle('on');t.classList.toggle('blue');
+      d.querySelector('.agbox').classList.toggle('show',t.classList.contains('on'));
+      d.querySelector('.mot').style.display=t.classList.contains('on')?'none':''; }
+    else if(k==='parou'){ t.classList.toggle('on');t.classList.toggle('red'); }
+    else t.classList.toggle('on');
+  });
+  d.querySelector('.save').onclick=async()=>{
+    const agendou=d.querySelector('[data-k=agendou]').classList.contains('on');
+    const parou=d.querySelector('[data-k=parou]').classList.contains('on');
+    const patch={
+      atendeu:d.querySelector('[data-k=atendeu]').classList.contains('on'),
+      respondeu:d.querySelector('[data-k=respondeu]').classList.contains('on'),
+      agendou, motivo:agendou?null:(d.querySelector('.mot').value||null),
+      closer_id:agendou?(d.querySelector('.closer').value||null):l.closer_id,
+      agendado_em:agendou?(d.querySelector('.agdata').value||null):null,
+      closer_status:agendou?'agendado':l.closer_status,
+      sdr_status: agendou?'agendado':parou?'parou':d.querySelector('[data-k=respondeu]').classList.contains('on')?'respondeu':d.querySelector('[data-k=atendeu]').classList.contains('on')?'atendido':'novo',
+      map_perfil:d.querySelector('.m_perfil').value||null, map_capital:d.querySelector('.m_capital').value||null,
+      map_terreno:d.querySelector('.m_terreno').value||null, map_quando:d.querySelector('.m_quando').value||null,
+      map_travamento:d.querySelector('.m_travamento').value||null, map_obs:d.querySelector('.m_obs').value||null,
+      updated_at:new Date().toISOString(), updated_by:PROFILE.nome };
+    await saveLead(d,l.id,patch);
+  };
+  return d;
+}
+
+// ---- CARD CLOSER ----
+function closerCard(l){
+  const d=document.createElement('div');d.className='lead';d.dataset.id=l.id;
+  d.innerHTML=head(l)+`
+    <div class="meta" style="margin-bottom:8px">Agendado: <b>${l.agendado_em||'-'}</b>${l.map_capital?` · capital: ${esc(l.map_capital)}`:''}${l.map_perfil?` · ${esc(l.map_perfil)}`:''}</div>
+    <div class="toggles">
+      <span class="tg ${l.compareceu?'on':''}" data-k="compareceu">Compareceu</span>
+      <span class="tg ${l.closer_status==='no_show'?'on red':''}" data-k="no_show">No-show</span>
+      <span class="tg ${l.vendeu?'on':''}" data-k="vendeu">Vendeu</span>
+      <span class="tg ${l.follow_up?'on amber':''}" data-k="follow_up">Follow-up</span>
+    </div>
+    <div class="grid2">
+      <div class="fld valbox" style="${l.vendeu?'':'display:none'}"><label>Valor da venda (R$)</label><input type="number" class="valor" value="${l.valor||''}" placeholder="ex: 5000"></div>
+    </div>
+    <div class="collapse show" style="margin-top:10px"><label class="fld" style="color:var(--muted);font-size:11px;margin-bottom:4px;display:block">RESUMO DA CALL</label>
+      <textarea class="resumo" rows="3" placeholder="O que rolou, objeção, próximo passo...">${esc(l.resumo_call)}</textarea></div>
+    <div class="row-end"><span class="msg"></span><button class="btn g save">Salvar</button></div>`;
+  d.querySelectorAll('.tg').forEach(t=>t.onclick=()=>{
+    const k=t.dataset.k;
+    if(k==='no_show'){t.classList.toggle('on');t.classList.toggle('red');}
+    else if(k==='follow_up'){t.classList.toggle('on');t.classList.toggle('amber');}
+    else t.classList.toggle('on');
+    if(k==='vendeu') d.querySelector('.valbox').style.display=t.classList.contains('on')?'':'none';
+  });
+  d.querySelector('.save').onclick=async()=>{
+    const vendeu=d.querySelector('[data-k=vendeu]').classList.contains('on');
+    const noshow=d.querySelector('[data-k=no_show]').classList.contains('on');
+    const patch={
+      compareceu:d.querySelector('[data-k=compareceu]').classList.contains('on'),
+      vendeu, valor:vendeu?(Number(d.querySelector('.valor').value)||0):null,
+      follow_up:d.querySelector('[data-k=follow_up]').classList.contains('on'),
+      closer_status: vendeu?'vendeu':noshow?'no_show':d.querySelector('[data-k=follow_up]').classList.contains('on')?'follow_up':d.querySelector('[data-k=compareceu]').classList.contains('on')?'compareceu':'agendado',
+      resumo_call:d.querySelector('.resumo').value||null,
+      updated_at:new Date().toISOString(), updated_by:PROFILE.nome };
+    await saveLead(d,l.id,patch);
+  };
+  return d;
+}
+
+async function saveLead(d,id,patch){
+  const btn=d.querySelector('.save'),msg=d.querySelector('.msg');btn.disabled=true;btn.textContent='...';
+  // garante sessão válida
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){ btn.disabled=false;btn.textContent='Salvar';msg.style.color='var(--red)';msg.textContent='Sessão expirou, recarregue a página';return; }
+  const {data,error}=await sb.from('dc_leads').update(patch).eq('id',id).select();
+  btn.disabled=false;btn.textContent='Salvar';
+  if(error){msg.style.color='var(--red)';msg.textContent='Erro: '+(error.message||error.code||'desconhecido');console.error('save error',error,patch);}
+  else if(!data||!data.length){msg.style.color='var(--red)';msg.textContent='Não gravou (0 linhas)';console.error('0 rows',patch);}
+  else{msg.style.color='var(--green)';msg.textContent='✓ salvo';setTimeout(()=>msg.textContent='',2000);}
+}
+
+// auto-login se já tem sessão
+sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
+</script>
+</body>
+</html>

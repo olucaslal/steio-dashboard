@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Steio dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1424'/%3E%3Cg fill='none' stroke='%23e5c46a' stroke-width='5' stroke-linejoin='round'%3E%3Cpolygon points='23,11 41,11 53,23 53,41 41,53 23,53 11,41 11,23'/%3E%3Cpath d='M20 43 V30 L32 21 L44 30 V43'/%3E%3Cline x1='20' y1='43' x2='44' y2='43'/%3E%3C/g%3E%3C/svg%3E" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand"><svg class="brand-ico big" viewBox="0 0 64 64" fill="none" stroke="#e5c46a" stroke-width="5" stroke-linejoin="round" aria-hidden="true"><polygon points="23,11 41,11 53,23 53,41 41,53 23,53 11,41 11,23"/><path d="M20 43 V30 L32 21 L44 30 V43"/><line x1="20" y1="43" x2="44" y2="43"/></svg> Steio <small>Dashboard comercial</small></div>
+    <form id="loginForm" class="login-form">
+      <label>Login <input name="login" autocomplete="username" required /></label>
+      <label>Senha <input name="senha" type="password" autocomplete="current-password" required /></label>
+      <button class="btn-primary" type="submit" id="loginSubmit">Entrar</button>
+      <p id="loginMsg" class="login-msg"></p>
+    </form>
+    <p class="login-hint">Acesso restrito · use seu login e senha da equipe.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="tb-left"><svg class="brand-ico" viewBox="0 0 64 64" fill="none" stroke="#e5c46a" stroke-width="5" stroke-linejoin="round" aria-hidden="true"><polygon points="23,11 41,11 53,23 53,41 41,53 23,53 11,41 11,23"/><path d="M20 43 V30 L32 21 L44 30 V43"/><line x1="20" y1="43" x2="44" y2="43"/></svg> Steio dashboard</div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="lancar">Lançar dados</button>
+      <button class="tab" data-tab="calendario">Calendário</button>
+      <button class="tab" data-tab="equipe">Equipe &amp; Metas</button>
+    </nav>
+    <div class="tb-right">
+      <span id="whoami" class="whoami"></span>
+      <button id="logoutBtn" class="btn-ghost">Sair</button>
+    </div>
+  </header>
+
+  <!-- DASHBOARD -->
+  <main id="tab-dashboard" class="tabpane">
+    <div class="pane-head">
+      <h1>Dashboard</h1>
+      <div class="period-wrap">
+        <div class="period-sel" id="periodSel">
+          <button data-p="hoje">Hoje</button>
+          <button data-p="ontem">Ontem</button>
+          <button data-p="7" class="active">7 dias</button>
+          <button data-p="14">14 dias</button>
+        </div>
+        <div class="period-range">📅 <input type="date" id="periodFrom"><span>até</span><input type="date" id="periodTo"></div>
+      </div>
+    </div>
+    <div id="missingBanner" class="missing-banner" hidden></div>
+
+    <nav class="subtabs" id="dashSub">
+      <button class="subtab active" data-sub="geral">Geral</button>
+      <button class="subtab" data-sub="funil">Funil de Venda</button>
+      <button class="subtab" data-sub="jornada">Jornada do Cliente</button>
+    </nav>
+
+    <!-- SUB: GERAL (financeiro) -->
+    <section id="sub-geral" class="subpane">
+      <section class="kpi-grid" id="finKpis"></section>
+      <div class="two-col">
+        <section class="card"><h2>Contratos fechados por dia</h2><div class="chart-box"><canvas id="chartContratos"></canvas></div></section>
+        <section class="card"><h2>Valor fechado por dia</h2><div class="chart-box"><canvas id="chartValor"></canvas></div></section>
+      </div>
+      <h2 class="section-title">Contratos por ticket</h2>
+      <section class="ticket-grid" id="ticketCards"></section>
+    </section>
+
+    <!-- SUB: FUNIL DE VENDA -->
+    <section id="sub-funil" class="subpane" hidden>
+      <div class="funnel-picker" id="funnelPicker"></div>
+      <section class="kpi-grid" id="kpiTop"></section>
+      <div class="two-col">
+        <section class="card">
+          <h2>Funil</h2>
+          <div id="funnel" class="funnel"></div>
+        </section>
+        <section class="card">
+          <h2>Custos</h2>
+          <div id="waterfall" class="waterfall"></div>
+        </section>
+      </div>
+      <h2 class="section-title">Campanhas <small class="muted">clique pra abrir conjuntos e anúncios</small></h2>
+      <div id="campTree" class="camp-tree"></div>
+    </section>
+
+    <!-- SUB: JORNADA DO CLIENTE -->
+    <section id="sub-jornada" class="subpane" hidden>
+      <section class="kpi-grid" id="jornadaKpis"></section>
+      <div id="jornadaTools" class="jornada-tools"></div>
+      <div id="jornadaBoard" class="journey-board"></div>
+    </section>
+  </main>
+
+  <!-- LANÇAR -->
+  <main id="tab-lancar" class="tabpane" hidden>
+    <div class="pane-head"><h1>Lançar dados do dia</h1>
+      <label class="date-pick">Data <input type="date" id="entryDate" /></label>
+    </div>
+    <div id="lancarWrap" class="lancar-wrap">
+      <section class="card narrow">
+        <div id="entryRoleLabel" class="entry-role"></div>
+        <form id="entryForm" class="entry-form"></form>
+        <p id="entryMsg" class="entry-msg"></p>
+      </section>
+      <section id="closerDeals" class="card" hidden></section>
+    </div>
+  </main>
+
+  <!-- CALENDÁRIO -->
+  <main id="tab-calendario" class="tabpane" hidden>
+    <div class="pane-head"><h1>Calendário</h1>
+      <div class="cal-nav"><button id="calPrev">‹</button><span id="calLabel"></span><button id="calNext">›</button></div>
+    </div>
+    <section class="card">
+      <div class="cal-legend" id="calLegend"></div>
+      <div id="calGrid" class="cal-grid"></div>
+    </section>
+    <section class="card" id="dayDetail" hidden></section>
+  </main>
+
+  <!-- EQUIPE & METAS -->
+  <main id="tab-equipe" class="tabpane" hidden>
+    <div class="pane-head"><h1>Equipe &amp; Metas</h1></div>
+    <div class="two-col">
+      <section class="card">
+        <h2>Equipe</h2>
+        <table class="tbl" id="teamTbl"></table>
+      </section>
+      <section class="card">
+        <h2>Metas (semáforo)</h2>
+        <table class="tbl" id="metaTbl"></table>
+        <p id="metaHint" class="muted sm" style="margin-top:10px"></p>
+      </section>
+    </div>
+  </main>
+
+  <!-- MODAL (detalhe do lead / novo cliente) -->
+  <div id="leadModal" class="modal-overlay" hidden></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="app.js"></script>
+</body>
+</html>
