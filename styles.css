@@ -428,3 +428,11 @@ button{font-family:inherit;cursor:pointer}
 /* ===== Marca Steio (topbar/login) ===== */
 .brand-ico{width:20px;height:20px;vertical-align:-4px;margin-right:5px}
 .brand-ico.big{width:30px;height:30px;vertical-align:-7px}
+
+/* ===== Pop-up de agendamento (SDR) / resumo (Closer) ===== */
+.prompt-overlay{z-index:60}
+.prompt-fields{display:flex;flex-direction:column;gap:11px;margin-bottom:8px}
+.prompt-fields label{display:flex;flex-direction:column;font-size:12px;font-weight:600;color:var(--ink2);gap:5px}
+.prompt-fields input,.prompt-fields textarea,.prompt-fields select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:14px;font-family:inherit}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary:disabled:hover{filter:none}

@@ -614,6 +614,7 @@ function sdrStagePatch(stage){
 }
 async function moverLeadSDR(id,stage){
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  if(stage==='agendaram' && !l.agendou){ abrirAgendamento(id); return; }
   const patch=sdrStagePatch(stage);
   if(stage==='agendaram'&&!l.agendado_em) patch.agendado_em=TODAY;
   const ok=await saveLead(id,patch);
@@ -687,6 +688,7 @@ function closerStagePatch(stage){
   return {};
 }
 async function moverLeadCloser(id,stage){
+  if(stage==='realizada'||stage==='segunda'){ abrirResumoReuniao(id,stage); return; }
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
   const patch=closerStagePatch(stage);
   const me=curUser(); if(me.role==='closer' && l.closer_id==null) patch.closer_id=me.id;
@@ -714,8 +716,53 @@ function closerControlsInner(l){
     </div>${map}`;
 }
 function wireCloserControls(scope){
-  scope.querySelectorAll('[data-cmv]').forEach(b=>b.onclick=()=>moverLeadCloser(b.closest('[data-clead]').dataset.clead,b.dataset.cmv));
+  scope.querySelectorAll('[data-cmv]').forEach(b=>b.onclick=()=>{
+    const id=b.closest('[data-clead]').dataset.clead, stage=b.dataset.cmv;
+    if(stage==='realizada'||stage==='segunda') abrirResumoReuniao(id,stage);
+    else moverLeadCloser(id,stage);
+  });
   scope.querySelectorAll('[data-csave]').forEach(b=>b.onclick=()=>salvarCloserLead(b.dataset.csave));
+}
+// Pop-up de resumo ao marcar Reunião realizada / 2ª reunião (obrigatório antes de salvar)
+function abrirResumoReuniao(id,stage){
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  const card=document.querySelector(`[data-clead="${id}"]`);
+  const produto=card?.querySelector('[data-cf="produto"]')?.value;
+  const valorProp=card?.querySelector('[data-cf="valor_proposto"]')?.value;
+  const prev = stage==='segunda' ? (l.resumo_call2||'') : (l.resumo_call||'');
+  abrirPrompt({
+    titulo: stage==='segunda' ? 'Resumo da 2ª reunião' : 'Resumo da reunião',
+    sub: 'Cole a transcrição ou escreva o resumo. Sem isso não dá pra salvar.',
+    campos: [{key:'resumo', type:'textarea', label:'Resumo / transcrição da reunião', value:prev, required:true, ph:'O que rolou na call, dores, objeções, próximos passos...'}],
+    onSalvar: async(data)=>{
+      const patch={...closerStagePatch(stage)};
+      if(produto!==undefined) patch.produto=produto||null;
+      if(valorProp!==undefined) patch.valor_proposto=Number(valorProp||0);
+      if(stage==='segunda') patch.resumo_call2=data.resumo; else patch.resumo_call=data.resumo;
+      const me=curUser(); if(me.role==='closer' && l.closer_id==null) patch.closer_id=me.id;
+      const ok=await saveLead(id,patch); if(ok) refreshLeadViews();
+    }
+  });
+}
+// Pop-up genérico (usado no agendamento do SDR e no resumo do Closer)
+function abrirPrompt({titulo, sub, campos, onSalvar}){
+  let ov=document.getElementById('promptModal');
+  if(!ov){ ov=document.createElement('div'); ov.id='promptModal'; ov.className='modal-overlay prompt-overlay'; document.body.appendChild(ov); }
+  const fieldHtml=campos.map(f=>{
+    if(f.type==='textarea') return `<label class="full">${f.label}<textarea data-pk="${f.key}" rows="5" ${f.required?'data-req':''} placeholder="${f.ph||''}">${f.value||''}</textarea></label>`;
+    if(f.type==='select') return `<label class="full">${f.label}<select data-pk="${f.key}" ${f.required?'data-req':''}>${f.options||''}</select></label>`;
+    return `<label>${f.label}<input type="${f.type}" data-pk="${f.key}" ${f.required?'data-req':''} value="${f.value||''}"></label>`;
+  }).join('');
+  ov.innerHTML=`<div class="modal-card"><button class="modal-x" id="pmX">×</button>
+    <h2>${titulo}</h2>${sub?`<p class="muted sm" style="margin:0 0 12px">${sub}</p>`:''}
+    <div class="prompt-fields">${fieldHtml}</div>
+    <div class="ml-actions"><button class="btn-primary" id="pmSave" disabled>Salvar</button></div></div>`;
+  ov.hidden=false;
+  const check=()=>{ const ok=[...ov.querySelectorAll('[data-req]')].every(e=>String(e.value).trim()); const sv=document.getElementById('pmSave'); if(sv) sv.disabled=!ok; };
+  ov.querySelectorAll('[data-pk]').forEach(e=>e.oninput=check); check();
+  const close=()=>{ ov.hidden=true; ov.innerHTML=''; };
+  document.getElementById('pmX').onclick=close; ov.onclick=e=>{ if(e.target===ov) close(); };
+  document.getElementById('pmSave').onclick=async()=>{ const data={}; ov.querySelectorAll('[data-pk]').forEach(e=>data[e.dataset.pk]=e.value); close(); await onSalvar(data); };
 }
 async function salvarCloserLead(id){
   const modal=$('#leadModal'); const sc=(modal&&!modal.hidden)?modal:document;
@@ -1108,21 +1155,41 @@ function sdrLeadCard(l){
 let MODAL_LEAD=null;
 function refreshLeadViews(){
   renderGeral(); renderJornada();
-  const lanc=$('#tab-lancar'); if(lanc && !lanc.hidden && isFieldRole(curUser()?.role)) renderSDRLancar();
+  const lanc=$('#tab-lancar');
+  if(lanc && !lanc.hidden){ const r=curUser()?.role;
+    if(isFieldRole(r)) renderSDRLancar();
+    else if(r==='closer') renderCloserLancar(); }
   if(MODAL_LEAD!=null){ const m=$('#leadModal'); if(m && !m.hidden) openEsteiraLeadModal(MODAL_LEAD); }
 }
 async function toggleSdrCheck(id,f){
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  // Marcar "Agendou" abre o pop-up obrigatório (data + hora + mapeamento)
+  if(f==='agendou' && !l.agendou){ abrirAgendamento(id); return; }
   const patch={}; patch[f]=!l[f];
   // encadeamento lógico: marcar etapa avançada acende as anteriores
   if(patch[f]===true){
     if(f==='respondeu') patch.atendeu=true;
-    if(f==='agendou'){ patch.atendeu=true; patch.respondeu=true; if(!l.agendado_em) patch.agendado_em=TODAY; }
     if(f==='compareceu'){ patch.atendeu=true; patch.respondeu=true; patch.agendou=true; }
     if(f==='follow_up') patch.atendeu=true;
   }
   const ok=await saveLead(id,patch);
   if(ok) refreshLeadViews();
+}
+// Pop-up obrigatório ao agendar (data, horário, mapeamento) — o lead só sai de "A trabalhar" depois disso
+function abrirAgendamento(id){
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  abrirPrompt({
+    titulo:'Agendar reunião', sub:'Coloque o dia, o horário e cole o mapeamento. Tudo é obrigatório.',
+    campos:[
+      {key:'agendado_em', type:'date', label:'Dia da reunião', value:l.agendado_em||TODAY, required:true},
+      {key:'agendado_hora', type:'time', label:'Horário', value:l.agendado_hora||'', required:true},
+      {key:'mapeamento', type:'textarea', label:'Mapeamento do lead', value:l.mapeamento||'', required:true, ph:'Perfil, capital, terreno, quando pretende, travamento, observações...'},
+    ],
+    onSalvar: async(data)=>{
+      const ok=await saveLead(id,{agendou:true, atendeu:true, respondeu:true, agendado_em:data.agendado_em, agendado_hora:data.agendado_hora, mapeamento:data.mapeamento});
+      if(ok) refreshLeadViews();
+    }
+  });
 }
 async function salvarAgendamento(id){
   const modal=$('#leadModal'); const scope=(modal&&!modal.hidden)?modal:document;
