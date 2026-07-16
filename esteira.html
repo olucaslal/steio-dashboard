@@ -227,6 +227,14 @@ function sdrCard(l){
   d.querySelector('.save').onclick=async()=>{
     const agendou=d.querySelector('[data-k=agendou]').classList.contains('on');
     const parou=d.querySelector('[data-k=parou]').classList.contains('on');
+    // Sem closer a reunião não tem dono e cai no dash dos dois. Agendou = tem que escolher.
+    const closerSel=d.querySelector('.closer');
+    if(agendou && !closerSel.value){
+      closerSel.focus(); closerSel.style.borderColor='var(--red)';
+      const m=d.querySelector('.msg'); if(m){ m.style.color='var(--red)'; m.textContent='Escolha o closer da reunião.'; }
+      return;
+    }
+    closerSel.style.borderColor='';
     const patch={
       atendeu:d.querySelector('[data-k=atendeu]').classList.contains('on'),
       respondeu:d.querySelector('[data-k=respondeu]').classList.contains('on'),
