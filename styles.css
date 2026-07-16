@@ -239,6 +239,9 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}
 /* KPIs de dinheiro */
 .kpi.kpi-money .k-val{color:var(--warn-text)}
 .kpi.kpi-cash .k-val{color:var(--ok-text)}
+/* Destaque "Dinheiro na mesa" (visão do closer) */
+.kpi.kpi-mesa{border-color:var(--gold-2);border-top:4px solid var(--gold-2)}
+.kpi.kpi-mesa .k-val{color:var(--gold-text)}
 
 /* PIPELINE (mini-CRM) */
 .pipe-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:16px}
@@ -409,11 +412,14 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}
 .sdr-checks{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}
 .sdr-chk{border:1px solid var(--line);background:var(--panel2);color:var(--ink2);padding:7px 13px;border-radius:8px;font-weight:600;font-size:12.5px}
 .sdr-chk.on{background:var(--ok);border-color:transparent;color:#04240f}
+/* "Desqualificado" não é avanço: quando ligado vai de vermelho, não de verde */
+.sdr-chk.chk-bad.on{background:var(--bad);color:#fff}
+.desq-tag{align-self:center;font-size:11.5px;font-weight:600;color:var(--bad-text);background:var(--bad-bg);border-radius:6px;padding:4px 9px}
 .sdr-agend{margin-top:12px;padding:13px;border-radius:10px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);display:flex;flex-direction:column;gap:10px}
 .sdr-agend-row{display:flex;gap:12px;flex-wrap:wrap}
 .sdr-agend label{display:flex;flex-direction:column;font-size:12px;font-weight:600;color:var(--ink2);gap:4px}
 .sdr-agend label.full{width:100%}
-.sdr-agend input,.sdr-agend textarea{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;width:100%}
+.sdr-agend input,.sdr-agend textarea,.sdr-agend select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;width:100%}
 .sdr-agend .btn-primary{align-self:flex-start}
 .sdr-ag-msg{font-size:12px;font-weight:600}
 /* Pop-up de comparecimento */
@@ -624,3 +630,75 @@ button:not(:disabled):active{transform:scale(.97);transition-duration:.07s}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
 }
+
+/* ===== Ajustes finos: lupa minimalista + Kanban em linha única ===== */
+.lead-busca{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a97b8' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20.5 20.5-3.4-3.4'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:11px center;background-size:15px;padding-left:34px!important;
+}
+.journey-board{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto;gap:12px;padding-bottom:6px}
+.journey-board .jcol{flex:0 0 190px;min-width:190px}
+@media(max-width:700px){.journey-board .jcol{flex:0 0 158px;min-width:158px}}
+
+/* ===== Visão do closer: KPIs sem card órfão (5+4 no desktop) ===== */
+.kpi-grid.kg-closer{grid-template-columns:repeat(20,minmax(0,1fr))}
+.kpi-grid.kg-closer .kpi{grid-column:span 4}
+.kpi-grid.kg-closer .kpi:nth-child(n+6){grid-column:span 5}
+@media(max-width:1150px){
+  .kpi-grid.kg-closer{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .kpi-grid.kg-closer .kpi{grid-column:span 1}
+  .kpi-grid.kg-closer .kpi:first-child{grid-column:1/-1}
+}
+@media(max-width:640px){
+  .kpi-grid.kg-closer{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* ===== Deals em aberto por produto (closer): 4 produtos fixos, alinhados ===== */
+.ticket-grid.tg-closer{margin-bottom:16px}
+.ticket-card.tk-zero{opacity:.55}
+.ticket-card .t-stats .temp{align-self:center}
+@media(min-width:1180px){
+  #sub-geral .ticket-grid.tg-closer{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+
+/* Card de deal clicável (abre o modal de edição) */
+.pipe-card[data-pipe]{cursor:pointer}
+
+/* ===== WhatsApp clicável em telefones de lead ===== */
+.wa-link{display:inline-flex;align-items:center;gap:5px;color:var(--ok-text);font-weight:600;text-decoration:none}
+.wa-link:hover{text-decoration:underline}
+.wa-link .ico{width:13px;height:13px}
+.wa-chip{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ok-bg);color:var(--ok-text);flex:none}
+.wa-chip .ico{width:12px;height:12px}
+.wa-chip:hover{filter:brightness(1.18)}
+.ml-row .wa-link{justify-content:flex-end}
+
+/* ===== Gestor: na mesa por produto + lista nominal "em jornada" ===== */
+.ticket-card .t-money.mesa{color:var(--gold-text)}
+.jorn-open{color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer}
+.jorn-open:hover{color:var(--gold-text)}
+.jp-list{display:flex;flex-direction:column;gap:6px;margin-top:6px;max-height:260px;overflow-y:auto}
+.jp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.jp-main{display:flex;flex-direction:column;min-width:0}
+.jp-main b{font-size:13px;display:flex;align-items:center;gap:6px}
+.jp-meta{display:flex;align-items:center;gap:8px;font-size:12px;flex:none}
+.jp-meta .pipe-status{background:var(--panel);border:1px solid var(--line)}
+@media(max-width:560px){.jp-row{flex-direction:column;align-items:flex-start;gap:6px}}
+
+/* ===== Coluna "Leads Antigos" (jornada do SDR) ===== */
+.jcol-antigos{background:var(--panel2)}
+.jcol-antigos .jcol-body{max-height:430px;overflow-y:auto}
+.ant-tools{padding:8px 8px 0}
+.ant-busca{min-width:0;width:100%;max-width:none;padding-top:6px;padding-bottom:6px;font-size:12px}
+.badge.antigo{background:var(--panel);color:var(--mut);border:1px solid var(--line)}
+.jcard .badge{margin-left:0}
+.jcard-antigo{border-left:3px solid var(--dot-none)}
+
+/* ===== No-show / remarcação ===== */
+.badge.nshow{background:var(--bad-bg);color:var(--bad-text)}
+.badge.remarcado{background:var(--warn-bg);color:var(--warn-text)}
+.badge.reagendar{background:var(--bad);color:#fff}
+.badge.desq{background:var(--panel2);color:var(--mut);border:1px solid var(--line)}
+.jflags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.jflags .badge{margin-left:0}
+.sdr-agend .btn-mini{margin-left:6px}

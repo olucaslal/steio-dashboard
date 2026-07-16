@@ -64,10 +64,12 @@ function range(r){ const d=new Date(); const f=x=>x.toISOString().slice(0,10); l
   if(r==='30d'){s.setDate(d.getDate()-29);return{since:f(s),until:f(d)};}
   return{since:d.toISOString().slice(0,8)+'01',until:f(d)}; }
 const STEPS=[['leads','Chegaram'],['qualificados','Qualif.'],['responderam','Respond.'],['agendaram','Agendaram'],['compareceram','Compar.'],['venderam','Venderam']];
+let _range='mes';
 async function load(r){
+  _range=r;
   const {since,until}=range(r);
-  document.getElementById('view').innerHTML='Carregando...';
-  let d; try{ d=await (await fetch(`${API}?since=${since}&until=${until}`)).json(); }catch(e){ document.getElementById('view').innerHTML='Erro ao carregar.'; return; }
+  if(!document.getElementById('view').innerHTML.includes('fcard')) document.getElementById('view').innerHTML='Carregando...';
+  let d; try{ d=await (await fetch(`${API}?since=${since}&until=${until}`,{cache:'no-store'})).json(); }catch(e){ document.getElementById('view').innerHTML='Erro ao carregar.'; return; }
   document.getElementById('periodo').textContent=`${since} a ${until}`;
   const t=d.total||{};
   const kc=(l,v,cls)=>`<div class="kc ${cls||''}"><div class="kl">${l}</div><div class="kv">${v}</div></div>`;
@@ -94,6 +96,7 @@ async function load(r){
 document.getElementById('periods').addEventListener('click',e=>{const b=e.target.closest('.pill');if(!b)return;
   document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active',p===b)); load(b.dataset.r);});
 load('mes');
+setInterval(()=>load(_range), 60000);
 </script>
 </body>
 </html>

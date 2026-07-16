@@ -122,6 +122,26 @@ const ICO_CAL='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="
 const ICO_WARN='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5Z"/><path d="M12 10v4.5M12 17.4v.2"/></svg>';
 const ICO_UP='<svg class="ico ico-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>';
 const ICO_DOWN='<svg class="ico ico-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5.5 12.5 12 19l6.5-6.5"/></svg>';
+const ICO_WA='<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8a8.2 8.2 0 0 0-7 12.4L4 20.2l4.1-1a8.2 8.2 0 1 0 3.9-15.4Z"/><path d="M9.2 8.6c-.5 1.8 3.4 6.2 5.6 6.1l.8-1.3-1.7-1.1-.8.5c-.7-.4-1.6-1.3-2-2l.5-.8-1.1-1.7-1.3.3Z"/></svg>';
+// WhatsApp clicável: 10-11 dígitos ganham 55; 12-13 começando com 55 vão direto; senão null
+function waHref(tel){
+  const d=String(tel||'').replace(/\D/g,'');
+  if(d.length===10||d.length===11) return 'https://wa.me/55'+d;
+  if((d.length===12||d.length===13)&&d.startsWith('55')) return 'https://wa.me/'+d;
+  return null;
+}
+// Número visível vira link (mantém o texto, só linka). stopPropagation pra não abrir o modal do card.
+function waTelHtml(tel){
+  if(!tel) return '';
+  const href=waHref(tel);
+  if(!href) return `<span>${tel}</span>`;
+  return `<a class="wa-link" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ICO_WA}${tel}</a>`;
+}
+// Chip discreto pra cards compactos que não exibem o número
+function waChipHtml(tel){
+  const href=waHref(tel); if(!href) return '';
+  return `<a class="wa-chip" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Chamar no WhatsApp · ${tel}">${ICO_WA}</a>`;
+}
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 const money=n=>!isFinite(n)||n==null?'—':'R$ '+Math.round(n).toLocaleString('pt-BR');
 const pct=n=>!isFinite(n)||n==null?'—':(n).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
@@ -163,7 +183,8 @@ function computeFunnel(dates){
 }
 
 // ---------- AGGREGATION (jornada / financeiro do CRM) ----------
-function pipeScopeCards(){ const me=curUser(); return me&&me.role==='closer' ? getPipeline().filter(c=>c.closer_id===me.id) : getPipeline(); }
+// Gestor: financeiro/jornada agora vem da ESTEIRA (dc_leads), não do dc_pipeline morto.
+function pipeScopeCards(){ return (ESTEIRA||[]).filter(l=>l.agendou); }
 // ---- Esteira (dc_leads): leads do SDR logado + gravação ----
 const isFieldRole = r => r==='sdr'||r==='social_seller';
 function myLeads(){ const me=curUser(); let ls=ESTEIRA||[]; if(me&&isFieldRole(me.role)) ls=ls.filter(l=>l.sdr_id===me.id); return ls; }
@@ -175,31 +196,37 @@ async function saveLead(id,patch){
   const row=(ESTEIRA||[]).find(l=>String(l.id)===String(id)); if(row) Object.assign(row,patch);
   return true;
 }
+// Todas leem leads da esteira (dc_leads): vendeu / valor / valor_proposto / produto / vendido_em / closerEtapa.
 function computePipeline(cards){
   const m={naMesa:0, contratado:0, coletado:0, fechados:0, perdidos:0, abertos:0, total:cards.length};
-  for(const c of cards){
-    const et=c.etapa||'1a_call';
-    if(et==='fechado'){ m.fechados++; m.contratado+=Number(c.valor_contrato)||0; m.coletado+=Number(c.valor_coletado)||0; }
+  for(const l of cards){
+    const et=closerEtapa(l);
+    if(et==='fechado'){ m.fechados++; const v=Number(l.valor)||0; m.contratado+=v; m.coletado+=v; }
     else if(et==='perdido'){ m.perdidos++; }
-    else { m.abertos++; m.naMesa+=Number(c.valor_apresentado)||0; }
+    else { m.abertos++; m.naMesa+=Number(l.valor_proposto)||0; }
   }
   m.conv = cards.length? m.fechados/cards.length*100 : 0;
   m.ticketMedio = m.fechados? m.contratado/m.fechados : NaN;
   return m;
 }
 function fechadosIn(cards,dateSet){let count=0,contratado=0,coletado=0;
-  for(const c of cards){ if(c.etapa==='fechado'&&c.fechado_em&&dateSet.has(c.fechado_em)){count++;contratado+=Number(c.valor_contrato)||0;coletado+=Number(c.valor_coletado)||0;} }
+  for(const l of cards){ const d=l.vendido_em?String(l.vendido_em).slice(0,10):null;
+    if(l.vendeu&&d&&dateSet.has(d)){count++;const v=Number(l.valor)||0;contratado+=v;coletado+=v;} }
   return {count,contratado,coletado};}
 function pipeByDay(cards,dates){
   const idx=Object.fromEntries(dates.map(d=>[d,{contratos:0,contratado:0,coletado:0}]));
-  for(const c of cards){ if(c.etapa!=='fechado'||!c.fechado_em)continue; const r=idx[c.fechado_em]; if(r){r.contratos++;r.contratado+=Number(c.valor_contrato)||0;r.coletado+=Number(c.valor_coletado)||0;} }
+  for(const l of cards){ if(!l.vendeu||!l.vendido_em)continue; const r=idx[String(l.vendido_em).slice(0,10)]; if(r){r.contratos++;const v=Number(l.valor)||0;r.contratado+=v;r.coletado+=v;} }
   return dates.map(d=>({date:d,...idx[d]}));
 }
 function pipeByTicket(cards){
-  const out={}; for(const k of Object.keys(PRODUCTS)) out[k]={count:0,contratado:0,coletado:0,emJornada:0};
-  for(const c of cards){ const p=c.produto; if(!p||!out[p])continue;
-    if(c.etapa==='fechado'){out[p].count++;out[p].contratado+=Number(c.valor_contrato)||0;out[p].coletado+=Number(c.valor_coletado)||0;}
-    else if(c.etapa!=='perdido'){out[p].emJornada++;} }
+  const out={}; for(const k of Object.keys(PRODUCTS)) out[k]={count:0,contratado:0,coletado:0,emJornada:0,naMesa:0};
+  for(const l of cards){ const p=l.produto; if(!p||!out[p])continue;
+    if(l.vendeu){out[p].count++;const v=Number(l.valor)||0;out[p].contratado+=v;out[p].coletado+=v;}
+    else if(closerEtapa(l)!=='perdido'){out[p].emJornada++;} }
+  // "Em jornada" também conta os deals em aberto do dc_pipeline (todos os closers);
+  // "na mesa" = soma do valor_apresentado desses deals abertos por produto
+  for(const c of getPipeline()){ const p=c.produto; if(!p||!out[p])continue;
+    if(ETAPAS_ABERTAS.includes(c.etapa||'1a_call')){ out[p].emJornada++; out[p].naMesa+=Number(c.valor_apresentado)||0; } }
   return out;
 }
 
@@ -231,13 +258,16 @@ function renderGeral(){
   const fHoje=fechadosIn(cards,new Set([TODAY]));
   const fSemana=fechadosIn(cards,new Set(lastNDates(7)));
   const P=computePipeline(cards);
+  // Dinheiro na mesa global: deals em aberto do dc_pipeline, todos os closers
+  const pipeAb=pipeAbertos(getPipeline());
+  const pipeMesa=pipeAb.reduce((s,c)=>s+(Number(c.valor_apresentado)||0),0);
   const kg=$('#finKpis');
   if(kg) kg.innerHTML=`
+    <div class="kpi none kpi-mesa"><div class="k-label">Dinheiro na mesa</div><div class="k-val">${money(pipeMesa)}</div><div class="k-meta">${intf(pipeAb.length)} deals em aberto</div></div>
     <div class="kpi none kpi-cash"><div class="k-label">Vendas hoje</div><div class="k-val">${intf(fHoje.count)}</div><div class="k-meta">${money(fHoje.contratado)} em contrato</div></div>
     <div class="kpi none kpi-cash"><div class="k-label">Vendas semana</div><div class="k-val">${intf(fSemana.count)}</div><div class="k-meta">${money(fSemana.contratado)} em contrato</div></div>
     <div class="kpi none kpi-money"><div class="k-label">Cash collect hoje</div><div class="k-val">${money(fHoje.coletado)}</div><div class="k-meta">entrou no caixa</div></div>
     <div class="kpi none kpi-money"><div class="k-label">Cash collect semana</div><div class="k-val">${money(fSemana.coletado)}</div><div class="k-meta">entrou no caixa</div></div>
-    <div class="kpi none"><div class="k-label">Dinheiro na mesa</div><div class="k-val">${money(P.naMesa)}</div><div class="k-meta">${intf(P.abertos)} em jornada</div></div>
     <div class="kpi none"><div class="k-label">Ticket médio</div><div class="k-val">${money(P.ticketMedio)}</div><div class="k-meta">por contrato fechado</div></div>`;
   renderCharts(cards);
   renderTicketCards(cards);
@@ -384,21 +414,54 @@ function renderTicketCards(cards){
     return `<div class="ticket-card">
       <div class="t-name">${p.label}</div>
       <div class="t-ticket">${money(p.ticket)}</div>
-      <div class="t-stats"><span><b>${intf(d.count)}</b> fechados</span><span><b>${intf(d.emJornada)}</b> em jornada</span></div>
+      <div class="t-stats"><span><b>${intf(d.count)}</b> fechados</span><a href="#" class="jorn-open" data-jorn="${k}" title="Ver quem está em jornada"><b>${intf(d.emJornada)}</b> em jornada</a></div>
+      <div class="t-money mesa">${money(d.naMesa)} <small>na mesa</small></div>
       <div class="t-money">${money(d.contratado)} <small>contratado</small></div>
       <div class="t-money cash">${money(d.coletado)} <small>coletado</small></div>
     </div>`;}).join('');
+  grid.querySelectorAll('.jorn-open').forEach(a=>a.onclick=e=>{e.preventDefault();openJornadaProdutoModal(a.dataset.jorn);});
   const dLabels=Object.values(PRODUCTS).map(p=>p.label);
   const dData=Object.keys(PRODUCTS).map(k=>by[k].count);
   const total=dData.reduce((a,b)=>a+b,0);
   drawChart('chartTickets','doughnut',dLabels,[{data:dData,backgroundColor:['#f0d68a','#d9ae4f','#a5762a','#68707d'],borderColor:cssVar('--card'),borderWidth:3,hoverOffset:6,spacing:1}],
     {_center:{big:intf(total),small:'fechados'},rotation:-90});
 }
+// Gestor · quem está "em jornada" naquele produto: deals do dc_pipeline + leads da esteira,
+// separados por origem pra ficar claro de onde vem o número. Só leitura.
+function openJornadaProdutoModal(k){
+  const p=PRODUCTS[k]; if(!p) return;
+  const userName=id=>(getUsers().find(u=>String(u.id)===String(id))||{}).nome||'·';
+  const deals=getPipeline().filter(c=>c.produto===k&&ETAPAS_ABERTAS.includes(c.etapa||'1a_call'));
+  const leads=pipeScopeCards().filter(l=>l.produto===k&&!l.vendeu&&closerEtapa(l)!=='perdido');
+  const mesa=deals.reduce((s,c)=>s+(Number(c.valor_apresentado)||0),0);
+  const row=(nome,closer,tagHtml,etapa,valor,tel)=>`<div class="jp-row">
+    <div class="jp-main"><b>${nome||'(sem nome)'} ${waChipHtml(tel)}</b><span class="muted sm">${closer}</span></div>
+    <div class="jp-meta">${tagHtml}<span class="pipe-status">${etapa}</span><b>${money(valor)}</b></div></div>`;
+  const dHtml=deals.length?deals.map(c=>row(c.lead_nome,userName(c.closer_id),
+      `<span class="temp ${c.temperatura||'morno'}">${TEMP_LABEL[c.temperatura]||''}</span>`,
+      (ETAPA_MAP[c.etapa||'1a_call']||{label:c.etapa}).label,c.valor_apresentado,c.telefone)).join('')
+    :'<p class="muted sm">nenhum deal do pipeline nesse produto</p>';
+  const lHtml=leads.length?leads.map(l=>row(l.nome,userName(l.closer_id),
+      (l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:'')+leadFlagsHtml(l),
+      (CLOSER_ETAPAS.find(e=>e.k===closerEtapa(l))||{}).label||'',l.valor_proposto,l.telefone)).join('')
+    :'<p class="muted sm">nenhum lead da esteira nesse produto</p>';
+  const m=$('#leadModal');
+  m.innerHTML=`<div class="modal-card">
+    <button class="modal-x" id="mClose">×</button>
+    <h2>${p.label} · em jornada</h2>
+    <p class="muted sm" style="margin:0 0 12px">${intf(deals.length+leads.length)} em aberto · ${money(mesa)} na mesa (deals)</p>
+    <div class="ml-move" style="margin-top:0"><span class="ml-lbl">Deals (pipeline) · ${intf(deals.length)}</span><div class="jp-list">${dHtml}</div></div>
+    <div class="ml-move"><span class="ml-lbl">Leads da esteira · ${intf(leads.length)}</span><div class="jp-list">${lHtml}</div></div>
+  </div>`;
+  m.hidden=false;
+  $('#mClose').onclick=closeModal;
+  m.onclick=e=>{if(e.target===m)closeModal();};
+}
 
 // ===== Sub-aba FUNIL DE VENDA (seletor de funil -> funil comercial + custos + árvore de campanhas) =====
 const DC_METRICS_API='https://steio.vercel.app/api/dc-metrics';
-const FUNIS_VENDA=['Formulário V1','Formulário V3','Typebot','Página (Site)','Social Selling'];
-const FUNIL_APELIDO={'Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling'};
+const FUNIS_VENDA=['Formulário V1','Formulário V3','Typebot','Página (Site)','Social Selling','Link da Bio'];
+const FUNIL_APELIDO={'Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
 const STEP_DEFS=[['leads','Chegaram','#3b82f6'],['qualificados','Qualificados','#6366f1'],['responderam','Responderam','#8b5cf6'],['agendaram','Agendaram','#a855f7'],['compareceram','Compareceram','#0ea5e9'],['venderam','Vendas','#22c55e']];
 let _dcCache={key:'',data:null};
 let SELFUNIL='Formulário V1';
@@ -407,11 +470,14 @@ async function renderFunil(){
   if(curUser()?.role==='closer') return renderCloserFunil();
   const pick=$('#funnelPicker'); if(!pick) return;
   const since=RANGE.start||TODAY, until=RANGE.end||TODAY, key=since+'|'+until;
-  let d=_dcCache.key===key?_dcCache.data:null;
+  // cache com validade de 55s: campanhas sempre frescas, sem piscar a tela (mantém o dado antigo enquanto rebusca)
+  const temAntigo=_dcCache.key===key && _dcCache.data;
+  let d=(temAntigo && Date.now()-(_dcCache.ts||0)<55_000)?_dcCache.data:null;
   if(!d){
-    pick.innerHTML=''; const kg=$('#kpiTop'); if(kg) kg.innerHTML='<div class="muted sm" style="padding:10px">Carregando funis…</div>';
-    try{ d=await (await fetch(`${DC_METRICS_API}?since=${since}&until=${until}`)).json(); _dcCache={key,data:d}; }
-    catch(e){ if(kg) kg.innerHTML='<div class="muted sm" style="padding:10px">Não consegui carregar os funis agora.</div>'; return; }
+    const kg=$('#kpiTop');
+    if(!temAntigo){ pick.innerHTML=''; if(kg) kg.innerHTML='<div class="muted sm" style="padding:10px">Carregando funis…</div>'; }
+    try{ d=await (await fetch(`${DC_METRICS_API}?since=${since}&until=${until}`,{cache:'no-store'})).json(); _dcCache={key,data:d,ts:Date.now()}; }
+    catch(e){ if(temAntigo){ d=_dcCache.data; } else { if(kg) kg.innerHTML='<div class="muted sm" style="padding:10px">Não consegui carregar os funis agora.</div>'; return; } }
   }
   // seletor de funil
   pick.innerHTML=FUNIS_VENDA.map(nome=>{
@@ -587,8 +653,23 @@ const SDR_ETAPAS=[
   {k:'followup',    label:'Follow up',   color:'#f59e0b'},
   {k:'agendaram',   label:'Agendaram',   color:'#a855f7'},
   {k:'compareceu',  label:'Compareceu',  color:'#0ea5e9'},
+  {k:'desqualificado', label:'Desqualificado', color:'#64748b'},
 ];
+// Motivos da desqualificação — mesmo vocabulário do "motivo" que a esteira já usa.
+const MOTIVOS_DESQ=[
+  ['sem_capital',     'Sem capital'],
+  ['so_investimento', 'Só quer investimento'],
+  ['fora_perfil',     'Fora do perfil (não é incorporador)'],
+  ['sem_interesse',   'Sem interesse'],
+  ['nao_responde',    'Não responde'],
+  ['numero_errado',   'Número errado'],
+  ['ja_cliente',      'Já é cliente'],
+  ['outro',           'Outro'],
+];
+const motivoLabel=k=>(MOTIVOS_DESQ.find(m=>m[0]===k)||[,k||''])[1];
+const desqualificado=l=>l.sdr_status==='desqualificado';
 function sdrEtapa(l){
+  if(desqualificado(l))return'desqualificado';  // vence o resto: saiu do fluxo
   if(l.compareceu)return'compareceu';
   if(l.agendou)return'agendaram';
   if(l.sdr_status==='follow_up'||l.follow_up)return'followup';
@@ -612,38 +693,71 @@ function renderJornada(){
       : '';
     const hint = JVIEW==='sdr'
       ? `<span class="muted sm">Leads que chegaram no período: se já foram contactados, responderam e agendaram.</span>`
-      : `<span class="muted sm">Suas calls: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`;
-    const search = (me.role==='gestor'||me.role==='sdr'||me.role==='social_seller')
-      ? `<input type="search" id="jBusca" class="lead-busca" placeholder="🔎 buscar lead" value="${JQ}">` : '';
-    tools.innerHTML = toggle + search + hint;
+      : (me.role==='closer'
+        ? `<span class="muted sm">Seus negócios: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`
+        : `<span class="muted sm">Suas calls: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`);
+    const search = (me.role==='gestor'||me.role==='sdr'||me.role==='social_seller'||me.role==='closer')
+      ? `<input type="search" id="jBusca" class="lead-busca" placeholder="buscar lead" value="${JQ}">` : '';
+    const addBtn = me.role==='closer'
+      ? `<button type="button" class="btn-mini ok" id="jAddBtn">+ Novo deal</button>`
+      : (JVIEW==='sdr' ? `<button type="button" class="btn-mini ok" id="jAddLeadBtn">+ Cadastrar lead</button>` : '');
+    tools.innerHTML = toggle + addBtn + search + hint;
     tools.querySelectorAll('.jt').forEach(b=>b.onclick=()=>{ JVIEW=b.dataset.v; renderJornada(); });
     const add=$('#jAddBtn'); if(add) add.onclick=openAddModal;
-    const jb=$('#jBusca'); if(jb){ jb.oninput=()=>{ JQ=jb.value; if(JVIEW==='sdr') renderJornadaSDR(); else renderJornadaCloser(); const f=$('#jBusca'); if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);} }; }
+    const addL=$('#jAddLeadBtn'); if(addL) addL.onclick=openAddLeadModal;
+    const jb=$('#jBusca'); if(jb){ jb.oninput=()=>{ JQ=jb.value; if(JVIEW==='sdr') renderJornadaSDR(); else renderJornadaCloserView(); const f=$('#jBusca'); if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);} }; }
   }
-  if(JVIEW==='sdr') renderJornadaSDR(); else renderJornadaCloser();
+  if(JVIEW==='sdr') renderJornadaSDR(); else renderJornadaCloserView();
 }
+// Lead antigo (importado das planilhas, antigo=true) ainda sem interação do SDR
+function antigoPendente(l){ return !!l.antigo && sdrEtapa(l)==='chegaram'; }
 function renderJornadaSDR(){
   const board=$('#jornadaBoard'); if(!board) return;
   const me=curUser();
   const dateSet=new Set(datesBetween(RANGE.start,RANGE.end));
-  let leads=(ESTEIRA||[]).filter(l=>{ const d=(l.data_chegada||'').slice(0,10); return !dateSet.size||dateSet.has(d); });
-  if(me.role==='sdr'||me.role==='social_seller') leads=leads.filter(l=>l.sdr_id===me.id);
-  if(JQ.trim()){ const q=JQ.trim().toLowerCase(); leads=leads.filter(l=>(l.nome||'').toLowerCase().includes(q)); }
+  let base=(ESTEIRA||[]);
+  if(me.role==='sdr'||me.role==='social_seller') base=base.filter(l=>l.sdr_id===me.id);
+  if(JQ.trim()){ const q=JQ.trim().toLowerCase(); base=base.filter(l=>(l.nome||'').toLowerCase().includes(q)); }
+  // Coluna "Leads Antigos": antigo=true sem interação, ignora o filtro de período (datas de abr-jun)
+  const antigos=base.filter(l=>antigoPendente(l)&&l.sdr_status!=='perdido');
+  const leads=base.filter(l=>{
+    if(antigoPendente(l)) return false;                 // pendente só aparece em "Leads Antigos"
+    if(l.antigo) return true;                           // antigo já trabalhado entra no fluxo normal, sem filtro de data
+    const d=(l.data_chegada||'').slice(0,10); return !dateSet.size||dateSet.has(d);
+  });
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=SDR_ETAPAS.map(E=>{const n=leads.filter(l=>sdrEtapa(l)===E.k).length;
     return `<div class="kpi none" style="border-left-color:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">leads</div></div>`;}).join('');
   const isMgr=me.role==='gestor';
   const canMove=isFieldRole(me.role);   // o próprio SDR/Social move seus leads
   board.classList.remove('jb-sdr','jb-closer');
-  board.innerHTML=SDR_ETAPAS.map(E=>{
+  const antCard=l=>{
+    const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'·';
+    const dc=(l.data_chegada||'').slice(0,10);
+    const nm=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
+    return `<div class="jcard jcard-antigo" data-lid="${l.id}" data-nome="${(l.nome||'').toLowerCase()}" draggable="${canMove}">
+      <b class="jopen">${l.nome||'(sem nome)'}</b>
+      <div class="jcard-foot"><span class="badge antigo">antigo</span>${waChipHtml(l.telefone)}${nm?`<span class="muted">${nm}</span>`:''}</div>
+      <div class="muted sm" style="margin-top:5px">${orig}${dc?` · ${fmtDate(dc)}`:''}</div>
+    </div>`;
+  };
+  const antBody=antigos.length?antigos.map(antCard).join(''):'<p class="muted sm">nenhum lead antigo pendente</p>';
+  const antCol=`<div class="jcol jcol-antigos">
+    <div class="jcol-head" style="--sc:#64748b">Leads Antigos <span id="antCount">${antigos.length}</span></div>
+    <div class="ant-tools"><input type="search" id="antBusca" class="lead-busca ant-busca" placeholder="buscar antigo"></div>
+    <div class="jcol-body">${antBody}</div>
+  </div>`;
+  board.innerHTML=antCol+SDR_ETAPAS.map(E=>{
     const cs=leads.filter(l=>sdrEtapa(l)===E.k);
     const body=cs.length?cs.map(l=>{
       const sdrName=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
       const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'—';
       const extra = l.agendou&&l.agendado_em ? `<div class="jcard-cash" style="color:var(--purple)">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` ${l.agendado_hora}`:''}</div>` : '';
+      const fl=leadFlagsHtml(l);
       return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}">
         <b class="jopen">${l.nome||'(sem nome)'}</b>
-        <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.qualificado?'ICP '+(l.icp||'✓'):'a qualificar'}</span>${sdrName?`<span class="muted">${sdrName}</span>`:''}</div>
+        <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.qualificado?'ICP '+(l.icp||'✓'):'a qualificar'}</span>${waChipHtml(l.telefone)}${sdrName?`<span class="muted">${sdrName}</span>`:''}</div>
+        ${fl?`<div class="jflags">${fl}</div>`:''}
         <div class="muted sm" style="margin-top:5px">${orig}</div>${extra}
       </div>`;}).join(''):'<p class="muted sm">sem leads</p>';
     return `<div class="jcol" data-sstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
@@ -654,12 +768,17 @@ function renderJornadaSDR(){
       card.ondragstart=e=>{_dragId=card.dataset.lid;e.dataTransfer.effectAllowed='move';};
       card.ondragend=()=>{_dragId=null;board.querySelectorAll('.jcol').forEach(c=>c.classList.remove('drop'));};
     });
-    board.querySelectorAll('.jcol').forEach(col=>{
+    board.querySelectorAll('.jcol[data-sstage]').forEach(col=>{
       col.ondragover=e=>{e.preventDefault();col.classList.add('drop');};
       col.ondragleave=()=>col.classList.remove('drop');
       col.ondrop=e=>{e.preventDefault();col.classList.remove('drop');const id=_dragId,st=col.dataset.sstage;if(id&&st)moverLeadSDR(id,st);};
     });
   }
+  // Busca local da coluna Leads Antigos (filtra sem re-render, contador acompanha)
+  const ab=$('#antBusca');
+  if(ab){ ab.oninput=()=>{ const q=ab.value.trim().toLowerCase(); let n=0;
+    board.querySelectorAll('.jcard-antigo').forEach(c=>{ const hit=!q||(c.dataset.nome||'').includes(q); c.style.display=hit?'':'none'; if(hit)n++; });
+    const cnt=$('#antCount'); if(cnt) cnt.textContent=n; }; }
 }
 function sdrStagePatch(stage){
   const P={atendeu:false,respondeu:false,follow_up:false,agendou:false,compareceu:false};
@@ -673,7 +792,10 @@ function sdrStagePatch(stage){
 async function moverLeadSDR(id,stage){
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
   if(stage==='agendaram' && !l.agendou){ abrirAgendamento(id); return; }
+  // arrastar pra coluna Desqualificado também exige o motivo
+  if(stage==='desqualificado'){ if(!desqualificado(l)) abrirDesqualificacao(id); return; }
   const patch=sdrStagePatch(stage);
+  if(desqualificado(l)){ patch.sdr_status=null; patch.motivo=null; }  // voltou pro fluxo
   if(stage==='agendaram'&&!l.agendado_em) patch.agendado_em=TODAY;
   const ok=await saveLead(id,patch);
   if(ok) refreshLeadViews();
@@ -681,14 +803,14 @@ async function moverLeadSDR(id,stage){
 // Pop-up no dia da call: leads que já passaram do agendamento e ainda não foram confirmados
 function checarComparecimentos(){
   const me=curUser(); if(!me) return;
-  const pend=myLeads().filter(l=>l.agendou && l.agendado_em && String(l.agendado_em).slice(0,10)<=TODAY && !l.compareceu && !l.compareceu_confirmado);
+  const pend=myLeads().filter(l=>l.agendou && l.agendado_em && String(l.agendado_em).slice(0,10)<=TODAY && !l.compareceu && !l.compareceu_confirmado && !aguardandoReagendamento(l));
   if(!pend.length) return;
   const m=$('#leadModal'); if(!m) return;
   m.innerHTML=`<div class="modal-card"><button class="modal-x" id="mClose">×</button>
     <h2>Confirmar comparecimento</h2>
     <p class="muted sm" style="margin-bottom:12px">Esses leads tinham call marcada. Eles compareceram?</p>
     <div class="cmp-list">${pend.map(l=>`<div class="cmp-row" data-lid="${l.id}">
-      <div><b>${l.nome||'(sem nome)'}</b><div class="muted sm">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</div></div>
+      <div><b>${l.nome||'(sem nome)'}</b> ${waChipHtml(l.telefone)}<div class="muted sm">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</div></div>
       <div class="cmp-btns"><button class="btn-mini ok" data-cmp="1">Compareceu</button><button class="btn-mini bad" data-cmp="0">Não veio</button></div>
     </div>`).join('')}</div></div>`;
   m.hidden=false;
@@ -697,7 +819,8 @@ function checarComparecimentos(){
   m.querySelectorAll('.cmp-row').forEach(row=>{
     row.querySelectorAll('[data-cmp]').forEach(b=>b.onclick=async()=>{
       const id=row.dataset.lid, val=b.dataset.cmp==='1';
-      const ok=await saveLead(id,{compareceu:val, compareceu_confirmado:true});
+      if(!val){ await marcarNoShow(id); row.remove(); if(!m.querySelector('.cmp-row')){ closeModal(); renderGeral(); renderJornada(); if(isFieldRole(curUser().role)) renderSDRLancar(); } return; }
+      const ok=await saveLead(id,{compareceu:true, compareceu_confirmado:true});
       if(!ok) return;
       row.remove();
       if(!m.querySelector('.cmp-row')){ closeModal(); renderGeral(); renderJornada(); if(isFieldRole(curUser().role)) renderSDRLancar(); }
@@ -740,12 +863,54 @@ function closerStagePatch(stage){
     case 'negociacao': return {compareceu:true,compareceu_confirmado:true,closer_status:'negociacao',vendeu:false};
     case 'segunda':    return {compareceu:true,compareceu_confirmado:true,closer_status:'segunda',vendeu:false};
     case 'followup':   return {compareceu:true,compareceu_confirmado:true,closer_status:'follow_up',vendeu:false};
-    case 'fechado':    return {compareceu:true,compareceu_confirmado:true,closer_status:'fechado',vendeu:true};
-    case 'perdido':    return {closer_status:'perdido',vendeu:false};
+    case 'fechado':    return {compareceu:true,compareceu_confirmado:true,closer_status:'fechado',vendeu:true,vendido_em:TODAY};
+    case 'perdido':    return {closer_status:'perdido',vendeu:false,vendido_em:null};
   }
   return {};
 }
+// ===== No-show e remarcação =====
+// Furou e ainda não tem data nova no futuro: o SDR precisa reagendar
+function aguardandoReagendamento(l){
+  if(!(Number(l.noshows)||0)) return false;
+  if(l.compareceu||l.vendeu) return false;
+  const d=(l.agendado_em||'').slice(0,10);
+  return !d||d<TODAY;
+}
+function leadFlagsHtml(l){
+  let h='';
+  const n=Number(l.noshows)||0;
+  if(n>0) h+=` <span class="badge nshow">no-show ×${n}</span>`;
+  if(l.remarcado) h+=` <span class="badge remarcado">remarcado</span>`;
+  if(aguardandoReagendamento(l)) h+=` <span class="badge reagendar">reagendar</span>`;
+  if(desqualificado(l)) h+=` <span class="badge desq">${l.motivo?motivoLabel(l.motivo):'desqualificado'}</span>`;
+  return h;
+}
+// No-show: soma 1 no contador, marca que não veio e já abre o reagendamento
+async function marcarNoShow(id){
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  const patch={...closerStagePatch('noshow'), noshows:(Number(l.noshows)||0)+1};
+  const ok=await saveLead(id,patch); if(!ok) return;
+  refreshLeadViews();
+  abrirReagendamento(id,{aposNoShow:true});
+}
+function abrirReagendamento(id,{aposNoShow=false}={}){
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  abrirPrompt({
+    titulo: aposNoShow?'No-show marcado · tentar reagendar':'Remarcar call',
+    sub: aposNoShow?'Combina uma nova data com o lead. Sem data ainda? Feche aqui: o lead fica com o aviso "reagendar".':'Nova data e horário da call.',
+    campos:[
+      {key:'data', type:'date', label:'Nova data', value:'', required:true},
+      {key:'hora', type:'time', label:'Horário', value:l.agendado_hora||''},
+    ],
+    onSalvar: async(d)=>{
+      if(!d.data) return;
+      const patch={agendou:true, agendado_em:d.data, agendado_hora:d.hora||null, remarcado:true, compareceu:false, compareceu_confirmado:false};
+      const ok=await saveLead(id,patch); if(ok) refreshLeadViews();
+    }
+  });
+}
 async function moverLeadCloser(id,stage){
+  if(stage==='noshow'){ marcarNoShow(id); return; }
   if(stage==='realizada'||stage==='segunda'){ abrirResumoReuniao(id,stage); return; }
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
   const patch=closerStagePatch(stage);
@@ -770,6 +935,7 @@ function closerControlsInner(l){
       ${resumoField}
       ${vendaField}
       <button type="button" class="btn-primary" data-csave="${l.id}">Salvar</button>
+      ${!['fechado','perdido'].includes(cur)?`<button type="button" class="btn-mini" data-remark="${l.id}">Remarcar call</button>`:''}
       <span class="sdr-ag-msg" id="cfmsg-${l.id}"></span>
     </div>${map}`;
 }
@@ -780,6 +946,7 @@ function wireCloserControls(scope){
     else moverLeadCloser(id,stage);
   });
   scope.querySelectorAll('[data-csave]').forEach(b=>b.onclick=()=>salvarCloserLead(b.dataset.csave));
+  scope.querySelectorAll('[data-remark]').forEach(b=>b.onclick=()=>abrirReagendamento(b.dataset.remark));
 }
 // Pop-up de resumo ao marcar Reunião realizada / 2ª reunião (obrigatório antes de salvar)
 function abrirResumoReuniao(id,stage){
@@ -817,7 +984,7 @@ function abrirPrompt({titulo, sub, campos, onSalvar}){
     <div class="ml-actions"><button class="btn-primary" id="pmSave" disabled>Salvar</button></div></div>`;
   ov.hidden=false;
   const check=()=>{ const ok=[...ov.querySelectorAll('[data-req]')].every(e=>String(e.value).trim()); const sv=document.getElementById('pmSave'); if(sv) sv.disabled=!ok; };
-  ov.querySelectorAll('[data-pk]').forEach(e=>e.oninput=check); check();
+  ov.querySelectorAll('[data-pk]').forEach(e=>{ e.oninput=check; e.onchange=check; }); check();
   const close=()=>{ ov.hidden=true; ov.innerHTML=''; };
   document.getElementById('pmX').onclick=close; ov.onclick=e=>{ if(e.target===ov) close(); };
   document.getElementById('pmSave').onclick=async()=>{ const data={}; ov.querySelectorAll('[data-pk]').forEach(e=>data[e.dataset.pk]=e.value); close(); await onSalvar(data); };
@@ -839,16 +1006,16 @@ function closerLeadCard(l){
   const orig=l.funil||'—'; const dc=(l.agendado_em||'').slice(0,10);
   return `<div class="sdr-card" data-clead="${l.id}" data-nome="${(l.nome||'').toLowerCase()}">
     <div class="sdr-card-head">
-      <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:''}</div>
+      <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:''}${leadFlagsHtml(l)}</div>
       <span class="muted sm">${orig}${dc?` · ${ICO_CAL} ${fmtDate(dc)}${l.agendado_hora?` ${l.agendado_hora}`:''}`:''}</span>
     </div>
+    ${l.telefone?`<div class="muted sm">${waTelHtml(l.telefone)}</div>`:''}
     ${closerControlsInner(l)}
   </div>`;
 }
 let CLOSER_FILTRO='abrir';   // abrir | hoje | todos
 function renderCloserLancar(){
   const lbl=$('#entryRoleLabel'), form=$('#entryForm'), msg=$('#entryMsg');
-  const cd=$('#closerDeals'); if(cd) cd.hidden=true;
   if(msg) msg.textContent='';
   const card=form.closest('.card'); if(card){card.classList.remove('narrow');card.classList.add('sdr-lancar');}
   form.classList.add('sdr-form');
@@ -858,7 +1025,7 @@ function renderCloserLancar(){
   else if(CLOSER_FILTRO==='abrir') leads=leads.filter(l=>!['fechado','perdido'].includes(closerEtapa(l)));
   const chip=(k,t)=>`<button type="button" class="sdr-fil ${CLOSER_FILTRO===k?'on':''}" data-cfil="${k}">${t}</button>`;
   const filtros=`<div class="sdr-filtros">${chip('abrir','Em aberto')}${chip('hoje','Calls de hoje')}${chip('todos','Histórico completo')}
-    <input type="search" id="closerBusca" class="lead-busca" placeholder="🔎 buscar lead" value="${SDR_Q}">
+    <input type="search" id="closerBusca" class="lead-busca" placeholder="buscar lead" value="${SDR_Q}">
     <span class="muted sm" id="sdrCount">${leads.length} calls</span></div>`;
   const rows=leads.length?leads.map(l=>closerLeadCard(l)).join(''):'<p class="muted sm" style="padding:12px">Nenhuma call nesse filtro.</p>';
   form.innerHTML=filtros+`<div class="sdr-list">${rows}</div>`;
@@ -866,9 +1033,36 @@ function renderCloserLancar(){
   form.querySelectorAll('.sdr-open').forEach(b=>b.onclick=()=>openEsteiraLeadModal(b.dataset.open));
   wireCloserControls(form);
   const busca=$('#closerBusca'); if(busca){busca.oninput=()=>{SDR_Q=busca.value;filtrarSdrCards();}; if(SDR_Q)filtrarSdrCards();}
+  renderCloserDeals();   // painel de deals (dc_pipeline) ao lado da worklist
+}
+// ---- Meus deals (dc_pipeline) · visão do closer ----
+function myPipeCards(){ const me=curUser(); return me?getPipeline().filter(c=>String(c.closer_id)===String(me.id)):[]; }
+function pipeAbertos(cards){ return cards.filter(c=>ETAPAS_ABERTAS.includes(c.etapa||'1a_call')); }
+// Bloco "deals em aberto por produto" (formato dos cards "Contratos por ticket" do gestor,
+// sempre com os 4 produtos fixos: Unity, ConstruMaster, Assessoria, CPV)
+function closerDealsPorProduto(abertos){
+  const byProd={}; for(const k of Object.keys(PRODUCTS)) byProd[k]=[];
+  let semProduto=0;
+  for(const c of abertos){ if(byProd[c.produto]) byProd[c.produto].push(c); else semProduto++; }
+  const tempPill=(cs,t)=>{const n=cs.filter(c=>(c.temperatura||'morno')===t).length;
+    return n?`<span class="temp ${t}">${intf(n)} ${TEMP_LABEL[t].toLowerCase()}${n>1?'s':''}</span>`:'';};
+  const cards=Object.entries(PRODUCTS).map(([k,p])=>{const cs=byProd[k];
+    const soma=cs.reduce((s,c)=>s+(Number(c.valor_apresentado)||0),0);
+    const temps=cs.length?`${tempPill(cs,'quente')}${tempPill(cs,'morno')}${tempPill(cs,'frio')}`:'<span class="muted sm">sem deals em aberto</span>';
+    return `<div class="ticket-card${cs.length?'':' tk-zero'}">
+      <div class="t-name">${p.label}</div>
+      <div class="t-ticket">${money(p.ticket)}</div>
+      <div class="t-stats"><span><b>${intf(cs.length)}</b> em aberto</span></div>
+      <div class="t-stats">${temps}</div>
+      <div class="t-money">${money(soma)} <small>na mesa</small></div>
+    </div>`;}).join('');
+  const extra=semProduto?`<p class="muted sm" style="margin:8px 0 0">${intf(semProduto)} deal(s) sem produto definido também em aberto · defina o produto no card.</p>`:'';
+  return `<h2 class="section-title">Deals em aberto por produto</h2><section class="ticket-grid tg-closer">${cards}</section>${extra}`;
 }
 function renderCloserGeral(){
   const pane=$('#sub-geral'); if(!pane) return;
+  const deals=myPipeCards(), abertos=pipeAbertos(deals);
+  const naMesa=abertos.reduce((s,c)=>s+(Number(c.valor_apresentado)||0),0);
   const inR=closerLeadsInRange(), all=closerScopeLeads();
   const hoje=all.filter(l=>(l.agendado_em||'').slice(0,10)===TODAY);
   const cnt=(a,f)=>a.filter(f).length;
@@ -880,7 +1074,8 @@ function renderCloserGeral(){
   const txComp=marcadas?100*compareceram/marcadas:NaN, txConv=compareceram?100*fechadas/compareceram:NaN;
   const kc=(l,v,c)=>`<div class="kpi none kpi-${c||'x'}"><div class="k-label">${l}</div><div class="k-val">${v}</div></div>`;
   pane.innerHTML=`
-    <section class="kpi-grid">
+    <section class="kpi-grid kg-closer">
+      <div class="kpi none kpi-mesa"><div class="k-label">Dinheiro na mesa</div><div class="k-val">${money(naMesa)}</div><div class="k-meta">${intf(abertos.length)} deals em aberto · em negociação</div></div>
       ${kc('Calls hoje',intf(hoje.length),'b')}
       ${kc('Calls marcadas',intf(marcadas))}
       ${kc('Compareceram',intf(compareceram),'t')}
@@ -890,6 +1085,7 @@ function renderCloserGeral(){
       ${kc('Taxa de conversão',pct(txConv),'g')}
       ${kc('Faturamento',money(faturamento),'g')}
     </section>
+    ${closerDealsPorProduto(abertos)}
     <div class="two-col">
       <section class="card"><h2>Calls por dia</h2><div class="chart-box"><canvas id="chartCalls"></canvas></div></section>
       <section class="card"><h2>Seu funil comercial</h2><div id="closerFunnelMini" class="funnel"></div></section>
@@ -949,8 +1145,10 @@ function renderJornadaCloser(){
       const dt=l.agendado_em?`<div class="muted sm" style="margin-top:5px">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` ${l.agendado_hora}`:''}</div>`:'';
       const info=(l.produto||l.valor_proposto)?`<div class="muted sm" style="margin-top:4px">${l.produto?produtoLabel(l.produto):''}${l.valor_proposto?`${l.produto?' · ':''}${money(l.valor_proposto)} proposto`:''}</div>`:'';
       const val=l.vendeu&&l.valor?`<div class="jcard-cash">${money(l.valor)} vendido</div>`:'';
+      const fl=leadFlagsHtml(l);
       return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}"><b class="jopen">${l.nome||'(sem nome)'}</b>
-        <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.icp?('ICP '+l.icp):''}</span>${isMgr?`<span class="muted">${(getUsers().find(u=>u.id===l.closer_id)||{}).nome||''}</span>`:''}</div>
+        <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.icp?('ICP '+l.icp):''}</span>${waChipHtml(l.telefone)}${isMgr?`<span class="muted">${(getUsers().find(u=>u.id===l.closer_id)||{}).nome||''}</span>`:''}</div>
+        ${fl?`<div class="jflags">${fl}</div>`:''}
         ${dt}${info}${val}</div>`;}).join(''):'<p class="muted sm">—</p>';
     return `<div class="jcol" data-cstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
   }).join('');
@@ -967,40 +1165,112 @@ function renderJornadaCloser(){
     });
   }
 }
+// Jornada do CLOSER logado: lê os deals do dc_pipeline (closer_id = usuário logado).
+// O gestor continua vendo a visão de esteira (renderJornadaCloser acima).
+function renderJornadaCloserView(){ if(curUser()?.role==='closer') renderJornadaCloserPipe(); else renderJornadaCloser(); }
+function renderJornadaCloserPipe(){
+  const board=$('#jornadaBoard'); if(!board) return;
+  board.classList.remove('jb-sdr'); board.classList.add('jb-closer');
+  let cards=myPipeCards();
+  if(JQ.trim()){ const q=JQ.trim().toLowerCase(); cards=cards.filter(c=>(c.lead_nome||'').toLowerCase().includes(q)); }
+  const etapaDe=c=>ETAPA_MAP[c.etapa]?c.etapa:'1a_call';
+  const kp=$('#jornadaKpis');
+  if(kp) kp.innerHTML=ETAPAS.map(E=>{const n=cards.filter(c=>etapaDe(c)===E.k).length;
+    return `<div class="kpi none" style="border-left-color:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">deals</div></div>`;}).join('');
+  board.innerHTML=ETAPAS.map(E=>{
+    const cs=cards.filter(c=>etapaDe(c)===E.k);
+    const body=cs.length?cs.map(c=>{
+      const info=(c.produto||c.valor_apresentado)?`<div class="muted sm" style="margin-top:4px">${c.produto?produtoLabel(c.produto):''}${Number(c.valor_apresentado)?`${c.produto?' · ':''}${money(c.valor_apresentado)} proposto`:''}</div>`:'';
+      const val=E.k==='fechado'?`<div class="jcard-cash">${money(c.valor_contrato)} contratado · ${money(c.valor_coletado)} coletado</div>`:'';
+      return `<div class="jcard" data-pid="${c.id}" draggable="true"><b class="jopen">${c.lead_nome||'(sem nome)'}</b>
+        <div class="jcard-foot"><span class="temp ${c.temperatura||'morno'}">${TEMP_LABEL[c.temperatura]||'Morno'}</span>${waChipHtml(c.telefone)}</div>
+        ${info}${val}</div>`;}).join(''):'<p class="muted sm">·</p>';
+    return `<div class="jcol" data-pstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
+  }).join('');
+  board.querySelectorAll('.jcard[data-pid] .jopen').forEach(nm=>nm.onclick=e=>{e.stopPropagation(); openLeadModal(nm.closest('.jcard').dataset.pid);});
+  board.querySelectorAll('.jcard[data-pid]').forEach(card=>{
+    card.ondragstart=e=>{_dragId=card.dataset.pid;e.dataTransfer.effectAllowed='move';};
+    card.ondragend=()=>{_dragId=null;board.querySelectorAll('.jcol').forEach(c=>c.classList.remove('drop'));};
+  });
+  board.querySelectorAll('.jcol').forEach(col=>{
+    col.ondragover=e=>{e.preventDefault();col.classList.add('drop');};
+    col.ondragleave=()=>col.classList.remove('drop');
+    col.ondrop=e=>{e.preventDefault();col.classList.remove('drop');const id=_dragId,st=col.dataset.pstage;if(id&&st)moveLead(id,st);};
+  });
+}
 function moveLead(id,stage){ if(stage==='fechado') pipeFechar(id); else pipeSetEtapa(id,stage); }
-function cardById(id){ return getPipeline().find(c=>c.id===id); }
+function cardById(id){ return getPipeline().find(c=>String(c.id)===String(id)); }
 function closeModal(){ const m=$('#leadModal'); if(m){m.hidden=true;m.innerHTML='';} }
 function openLeadModal(id){
   const c=cardById(id); if(!c)return;
-  const me=curUser(); const own=me.role==='closer'&&c.closer_id===me.id;
+  const me=curUser(); const own=me.role==='closer'&&String(c.closer_id)===String(me.id);
   const E=ETAPA_MAP[c.etapa]||{label:c.etapa};
   const ownerName=(getUsers().find(u=>u.id===c.closer_id)||{}).nome||'';
-  const fechadoInfo=c.etapa==='fechado'
-    ? `<div class="ml-row"><span>Valor do contrato</span><b>${money(c.valor_contrato)}</b></div>
-       <div class="ml-row"><span>Coletado (cash collect)</span><b class="cash">${money(c.valor_coletado)}</b></div>`
-    : '';
-  const movePills=own
-    ? `<div class="ml-move"><span class="ml-lbl">Mover na jornada:</span><div class="stage-row">${ETAPAS.map(s=>`<button class="stage-pill${s.k===c.etapa?' on':''}" data-mv="${s.k}" style="--sc:${s.color}">${s.label}</button>`).join('')}</div></div>
-       <div class="ml-actions"><button class="btn-mini" data-del="1">🗑 Excluir cliente</button></div>`
-    : '';
   const m=$('#leadModal');
-  m.innerHTML=`<div class="modal-card">
-    <button class="modal-x" id="mClose">×</button>
-    <h2>${c.lead_nome}</h2>
-    <div class="ml-grid">
-      <div class="ml-row"><span>Produto</span><b>${c.produto?produtoLabel(c.produto)+' · '+money(PRODUCTS[c.produto].ticket):'—'}</b></div>
-      <div class="ml-row"><span>Temperatura</span><b>${TEMP_LABEL[c.temperatura]||'—'}</b></div>
-      <div class="ml-row"><span>Etapa atual</span><b>${E.label}</b></div>
-      <div class="ml-row"><span>Valor proposto</span><b>${money(c.valor_apresentado)}</b></div>
-      ${fechadoInfo}
-      ${me.role==='gestor'?`<div class="ml-row"><span>Closer</span><b>${ownerName}</b></div>`:''}
-    </div>
-    ${movePills}
-  </div>`;
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const movePills=own
+    ? `<div class="ml-move"><span class="ml-lbl">Mover na jornada:</span><div class="stage-row">${ETAPAS.map(s=>`<button type="button" class="stage-pill${s.k===c.etapa?' on':''}" data-mv="${s.k}" style="--sc:${s.color}">${s.label}</button>`).join('')}</div></div>
+       <div class="ml-actions"><button type="button" class="btn-mini" data-del="1">🗑 Excluir cliente</button></div>`
+    : '';
+  if(own){
+    // Deal editável: nome, produto, temperatura e valores atualizam o dc_pipeline
+    const prodOpts=['<option value="">Produto…</option>'].concat(Object.entries(PRODUCTS).map(([k,p])=>`<option value="${k}"${c.produto===k?' selected':''}>${p.label} · ${money(p.ticket)}</option>`)).join('');
+    const tempOpts=Object.entries(TEMP_LABEL).map(([k,l])=>`<option value="${k}"${(c.temperatura||'morno')===k?' selected':''}>${l}</option>`).join('');
+    const fechadoFields=c.etapa==='fechado'?`
+        <label>Valor do contrato (R$)<input type="number" min="0" step="100" data-pf="valor_contrato" value="${c.valor_contrato??''}"></label>
+        <label>Coletado · cash collect (R$)<input type="number" min="0" step="100" data-pf="valor_coletado" value="${c.valor_coletado??''}"></label>`:'';
+    m.innerHTML=`<div class="modal-card">
+      <button class="modal-x" id="mClose">×</button>
+      <h2>Editar deal</h2>
+      <p class="muted sm" style="margin:0 0 12px">Etapa atual: <b>${E.label}</b></p>
+      <form id="pipeEditForm" class="entry-form" style="margin:0">
+        <label class="full">Cliente (nome)<input data-pf="lead_nome" value="${esc(c.lead_nome)}" required></label>
+        <label>Produto<select data-pf="produto">${prodOpts}</select></label>
+        <label>Temperatura<select data-pf="temperatura">${tempOpts}</select></label>
+        <label>WhatsApp / telefone<input type="tel" data-pf="telefone" value="${esc(c.telefone)}" placeholder="(DDD) 99999-9999"></label>
+        <label>Valor proposto (R$)<input type="number" min="0" step="100" data-pf="valor_apresentado" value="${c.valor_apresentado??''}"></label>
+        ${fechadoFields}
+        <button class="btn-primary full" type="submit">Salvar alterações</button>
+        <p class="entry-msg" id="pipeEditMsg"></p>
+      </form>
+      ${movePills}
+    </div>`;
+  } else {
+    const fechadoInfo=c.etapa==='fechado'
+      ? `<div class="ml-row"><span>Valor do contrato</span><b>${money(c.valor_contrato)}</b></div>
+         <div class="ml-row"><span>Coletado (cash collect)</span><b class="cash">${money(c.valor_coletado)}</b></div>`
+      : '';
+    m.innerHTML=`<div class="modal-card">
+      <button class="modal-x" id="mClose">×</button>
+      <h2>${c.lead_nome}</h2>
+      <div class="ml-grid">
+        <div class="ml-row"><span>Produto</span><b>${c.produto?produtoLabel(c.produto)+' · '+money(PRODUCTS[c.produto].ticket):'·'}</b></div>
+        <div class="ml-row"><span>Temperatura</span><b>${TEMP_LABEL[c.temperatura]||'·'}</b></div>
+        <div class="ml-row"><span>Etapa atual</span><b>${E.label}</b></div>
+        <div class="ml-row"><span>WhatsApp</span><b>${c.telefone?waTelHtml(c.telefone):'·'}</b></div>
+        <div class="ml-row"><span>Valor proposto</span><b>${money(c.valor_apresentado)}</b></div>
+        ${fechadoInfo}
+        ${me.role==='gestor'?`<div class="ml-row"><span>Closer</span><b>${ownerName}</b></div>`:''}
+      </div>
+    </div>`;
+  }
   m.hidden=false;
   $('#mClose').onclick=closeModal;
   m.onclick=e=>{if(e.target===m)closeModal();};
   if(own){
+    const f=$('#pipeEditForm');
+    if(f) f.onsubmit=async ev=>{
+      ev.preventDefault();
+      const g=k=>{const el2=f.querySelector(`[data-pf="${k}"]`);return el2?el2.value:undefined;};
+      const patch={lead_nome:(g('lead_nome')||'').trim(),produto:g('produto')||null,temperatura:g('temperatura')||'morno',telefone:(g('telefone')||'').trim()||null,valor_apresentado:Number(g('valor_apresentado')||0),updated_at:new Date().toISOString()};
+      if(g('valor_contrato')!==undefined) patch.valor_contrato=Number(g('valor_contrato')||0);
+      if(g('valor_coletado')!==undefined) patch.valor_coletado=Number(g('valor_coletado')||0);
+      if(!patch.lead_nome) return;
+      const msg=$('#pipeEditMsg'); if(msg){msg.style.color='var(--ink2)';msg.textContent='Salvando...';}
+      try{ const {error}=await sb.from('dc_pipeline').update(patch).eq('id',c.id); if(error)throw error;
+        await loadPipeline(); closeModal(); refreshPipelineViews(); }
+      catch(e2){ if(msg){msg.style.color='var(--bad)';msg.textContent='Erro: '+(e2.message||e2);} }
+    };
     m.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>{const s=b.dataset.mv;closeModal();if(s==='fechado')pipeFechar(c.id);else pipeSetEtapa(c.id,s);});
     const del=m.querySelector('[data-del]'); if(del) del.onclick=()=>{closeModal();pipeExcluir(c.id);};
   }
@@ -1015,7 +1285,8 @@ function openAddModal(){
       <label class="full">Cliente (nome)<input name="lead_nome" autocomplete="off" required></label>
       <label>Produto<select name="produto">${prodOpts}</select></label>
       <label>Temperatura<select name="temperatura"><option value="quente">Quente</option><option value="morno" selected>Morno</option><option value="frio">Frio</option></select></label>
-      <label class="full">Valor proposto (R$)<input type="number" min="0" step="1" name="valor_apresentado"></label>
+      <label>WhatsApp / telefone<input type="tel" name="telefone" placeholder="(DDD) 99999-9999"></label>
+      <label>Valor proposto (R$)<input type="number" min="0" step="1" name="valor_apresentado"></label>
       <button class="btn-primary full" type="submit">Adicionar</button>
     </form>
   </div>`;
@@ -1155,7 +1426,10 @@ const SDR_CHECKS=[
   {f:'follow_up', label:'Follow up'},
   {f:'agendou',   label:'Agendou'},
   {f:'compareceu',label:'Compareceu'},
+  // não é coluna do banco: vive no sdr_status. Marcar exige motivo (pop-up).
+  {f:'desqualificado', label:'Desqualificado', bad:true},
 ];
+const chkLigado=(l,f)=> f==='desqualificado' ? desqualificado(l) : !!l[f];
 let SDR_Q='';
 function renderSDRLancar(){
   const lbl=$('#entryRoleLabel'), form=$('#entryForm'), msg=$('#entryMsg');
@@ -1165,19 +1439,25 @@ function renderSDRLancar(){
   form.classList.add('sdr-form');
   lbl.innerHTML=`Seus leads · <b>marque o que já fez em cada um</b>`;
   let leads=myLeads().slice().sort((a,b)=>(b.data_chegada||'').localeCompare(a.data_chegada||''));
+  const nAntigos=leads.filter(l=>antigoPendente(l)&&l.sdr_status!=='perdido').length;
   if(SDR_FILTRO==='hoje') leads=leads.filter(l=>(l.data_chegada||'').slice(0,10)===TODAY);
-  else if(SDR_FILTRO==='pendentes') leads=leads.filter(l=>!l.agendou&&!l.compareceu&&l.sdr_status!=='perdido');
+  else if(SDR_FILTRO==='pendentes') leads=leads.filter(l=>!l.agendou&&!l.compareceu&&l.sdr_status!=='perdido'&&!antigoPendente(l));   // antigos pendentes têm categoria própria
+  else if(SDR_FILTRO==='antigos') leads=leads.filter(l=>antigoPendente(l)&&l.sdr_status!=='perdido');   // importados ainda sem interação
   const chip=(k,t)=>`<button type="button" class="sdr-fil ${SDR_FILTRO===k?'on':''}" data-fil="${k}">${t}</button>`;
-  const filtros=`<div class="sdr-filtros">${chip('pendentes','A trabalhar')}${chip('hoje','Chegaram hoje')}${chip('todos','Histórico completo')}
-    <input type="search" id="sdrBusca" class="lead-busca" placeholder="🔎 buscar lead pelo nome" value="${SDR_Q}">
+  const filtros=`<div class="sdr-filtros">${chip('pendentes','A trabalhar')}${chip('hoje','Chegaram hoje')}${chip('antigos',`Leads Antigos · ${intf(nAntigos)}`)}${chip('todos','Histórico completo')}
+    <button type="button" class="btn-mini ok" id="wlAddLead">+ Cadastrar lead</button>
+    <input type="search" id="sdrBusca" class="lead-busca" placeholder="buscar lead pelo nome" value="${SDR_Q}">
     <span class="muted sm" id="sdrCount">${leads.length} leads</span></div>`;
   const rows = leads.length ? leads.map(l=>sdrLeadCard(l)).join('') : '<p class="muted sm" style="padding:12px">Nenhum lead nesse filtro. 🎉</p>';
   const socialTop = curUser().role==='social_seller' ? socialMetricsFormHTML() : '';
   form.innerHTML=socialTop+filtros+`<div class="sdr-list">${rows}</div>`;
   const sm=$('#smSave'); if(sm) sm.onclick=saveSocialMetrics;
+  const wlAdd=$('#wlAddLead'); if(wlAdd) wlAdd.onclick=openAddLeadModal;
   form.querySelectorAll('.sdr-fil').forEach(b=>b.onclick=()=>{SDR_FILTRO=b.dataset.fil;renderSDRLancar();});
   form.querySelectorAll('.sdr-chk').forEach(b=>b.onclick=()=>toggleSdrCheck(b.dataset.id,b.dataset.f));
   form.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>salvarAgendamento(b.dataset.save));
+  form.querySelectorAll('[data-nshow]').forEach(b=>b.onclick=()=>marcarNoShow(b.dataset.nshow));
+  form.querySelectorAll('[data-remark]').forEach(b=>b.onclick=()=>abrirReagendamento(b.dataset.remark));
   form.querySelectorAll('.sdr-open').forEach(b=>b.onclick=()=>openEsteiraLeadModal(b.dataset.open));
   const busca=$('#sdrBusca');
   if(busca){ busca.oninput=()=>{ SDR_Q=busca.value; filtrarSdrCards(); }; if(SDR_Q) filtrarSdrCards(); }
@@ -1187,14 +1467,19 @@ function filtrarSdrCards(){
   $$('.sdr-list .sdr-card').forEach(c=>{ const hit=!q||(c.dataset.nome||'').includes(q); c.style.display=hit?'':'none'; if(hit)n++; });
   const cnt=$('#sdrCount'); if(cnt) cnt.textContent=`${n} leads`;
 }
-function sdrChecksHTML(l){ return SDR_CHECKS.map(c=>`<button type="button" class="sdr-chk ${l[c.f]?'on':''}" data-id="${l.id}" data-f="${c.f}">${l[c.f]?'✓ ':''}${c.label}</button>`).join(''); }
+function sdrChecksHTML(l){ return SDR_CHECKS.map(c=>{ const on=chkLigado(l,c.f);
+  return `<button type="button" class="sdr-chk ${on?'on':''}${c.bad?' chk-bad':''}" data-id="${l.id}" data-f="${c.f}">${on?'✓ ':''}${c.label}</button>`;}).join('')
+  + (desqualificado(l)&&l.motivo?`<span class="desq-tag" title="Motivo da desqualificação">${motivoLabel(l.motivo)}</span>`:''); }
 function sdrAgendHTML(l){ return l.agendou ? `<div class="sdr-agend">
       <div class="sdr-agend-row">
+        <label>Closer<select data-ag="closer_id">${closerOptions(l.closer_id)}</select></label>
         <label>Data<input type="date" data-ag="agendado_em" value="${l.agendado_em||TODAY}"></label>
         <label>Horário<input type="time" data-ag="agendado_hora" value="${l.agendado_hora||''}"></label>
       </div>
       <label class="full">Mapeamento (cole aqui)<textarea data-ag="mapeamento" rows="4" placeholder="Perfil, capital, terreno, quando pretende, travamento, observações...">${l.mapeamento||''}</textarea></label>
       <button type="button" class="btn-primary" data-save="${l.id}">Salvar agendamento</button>
+      <button type="button" class="btn-mini bad" data-nshow="${l.id}">No-show</button>
+      <button type="button" class="btn-mini" data-remark="${l.id}">Remarcar</button>
       <span class="sdr-ag-msg" id="agmsg-${l.id}"></span>
     </div>` : ''; }
 function sdrLeadCard(l){
@@ -1202,13 +1487,70 @@ function sdrLeadCard(l){
   const dc=(l.data_chegada||'').slice(0,10);
   return `<div class="sdr-card" data-lead="${l.id}" data-nome="${(l.nome||'').toLowerCase()}">
     <div class="sdr-card-head">
-      <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:(l.qualificado?'<span class="badge ok">ICP</span>':'')}</div>
+      <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:(l.qualificado?'<span class="badge ok">ICP</span>':'')}${l.antigo?' <span class="badge antigo">antigo</span>':''}${leadFlagsHtml(l)}</div>
       <span class="muted sm">${orig}${dc?` · ${fmtDate(dc)}`:''}</span>
     </div>
-    ${l.telefone?`<div class="muted sm">${l.telefone}</div>`:''}
+    ${l.telefone?`<div class="muted sm">${waTelHtml(l.telefone)}</div>`:''}
     <div class="sdr-checks">${sdrChecksHTML(l)}</div>
     ${sdrAgendHTML(l)}
   </div>`;
+}
+// ===== Cadastro manual de lead (pescado fora dos funis: Instagram, indicação...) =====
+const LEAD_ORIGENS=['Instagram','Tráfego','Indicação','Evento','Outro'];
+function openAddLeadModal(){
+  const me=curUser(); if(!me) return;
+  const donos=getUsers().filter(u=>isFieldRole(u.role));
+  const donoOpts=donos.map(u=>`<option value="${u.id}"${String(u.id)===String(me.id)?' selected':''}>${u.nome}</option>`).join('');
+  const m=$('#leadModal'); if(!m) return;
+  m.innerHTML=`<div class="modal-card">
+    <button class="modal-x" id="mClose">×</button>
+    <h2>Cadastrar lead</h2>
+    <p class="muted sm" style="margin:0 0 12px">Lead pescado fora dos funis. Ele entra na esteira do SDR dono como lead novo.</p>
+    <form id="addLeadForm" class="entry-form" style="margin:0">
+      <label class="full">Nome<input name="nome" autocomplete="off" required></label>
+      <label>WhatsApp / telefone<input type="tel" name="telefone" placeholder="(DDD) 99999-9999"></label>
+      <label>E-mail<input type="email" name="email" placeholder="opcional"></label>
+      <label>Origem<select name="origem">${LEAD_ORIGENS.map(o=>`<option>${o}</option>`).join('')}</select></label>
+      <label>SDR dono<select name="sdr_id">${donoOpts}</select></label>
+      <label class="full">Observação (opcional)<textarea name="obs" rows="2" placeholder="Contexto do lead, de onde veio, o que já conversou..."></textarea></label>
+      <button class="btn-primary full" type="submit">Cadastrar lead</button>
+      <p class="entry-msg" id="addLeadMsg"></p>
+    </form>
+  </div>`;
+  m.hidden=false;
+  $('#mClose').onclick=closeModal;
+  m.onclick=e=>{if(e.target===m)closeModal();};
+  $('#addLeadForm').onsubmit=addLeadManual;
+}
+async function addLeadManual(ev){
+  ev.preventDefault();
+  const me=curUser();
+  const fd=new FormData(ev.target);
+  const nome=(fd.get('nome')||'').trim(); if(!nome) return;
+  const msg=$('#addLeadMsg'); if(msg){msg.style.color='var(--ink2)';msg.textContent='Salvando...';}
+  const tel=(fd.get('telefone')||'').trim(), dig=tel.replace(/\D/g,'');
+  const slug=nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  const origem=fd.get('origem')||'Outro';
+  const rec={
+    lead_key:'manual:'+(dig||slug+'-'+Date.now()),
+    nome, telefone:tel||null, email:(fd.get('email')||'').trim()||null,
+    funil:'Manual · '+origem, campanha:'Manual · '+origem,
+    sdr_id:fd.get('sdr_id')||(me?me.id:null),
+    data_chegada:new Date().toISOString(),
+    qualificado:false, antigo:false, sdr_status:'novo',
+  };
+  const obs=(fd.get('obs')||'').trim(); if(obs) rec.mapeamento=obs;
+  try{
+    const {error}=await sb.from('dc_leads').insert(rec);
+    if(error){
+      if(String(error.code)==='23505'||/duplicate|unique/i.test(error.message||'')){
+        if(msg){msg.style.color='var(--bad)';msg.textContent='Esse telefone já está cadastrado na esteira.';}
+        return;
+      }
+      throw error;
+    }
+    await loadEsteira(); closeModal(); refreshLeadViews();
+  }catch(e2){ if(msg){msg.style.color='var(--bad)';msg.textContent='Erro: '+(e2.message||e2);} }
 }
 let MODAL_LEAD=null;
 function refreshLeadViews(){
@@ -1221,9 +1563,13 @@ function refreshLeadViews(){
 }
 async function toggleSdrCheck(id,f){
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
-  // Marcar "Agendou" abre o pop-up obrigatório (data + hora + mapeamento)
+  // Marcar "Agendou" abre o pop-up obrigatório (closer + data + hora + mapeamento)
   if(f==='agendou' && !l.agendou){ abrirAgendamento(id); return; }
+  // Desqualificar abre o pop-up do motivo; desmarcar devolve o lead pro fluxo
+  if(f==='desqualificado'){ if(desqualificado(l)) requalificar(id); else abrirDesqualificacao(id); return; }
   const patch={}; patch[f]=!l[f];
+  // sair da desqualificação ao mexer em qualquer etapa do fluxo
+  if(desqualificado(l)){ patch.sdr_status=null; patch.motivo=null; }
   // encadeamento lógico: marcar etapa avançada acende as anteriores
   if(patch[f]===true){
     if(f==='respondeu') patch.atendeu=true;
@@ -1233,27 +1579,63 @@ async function toggleSdrCheck(id,f){
   const ok=await saveLead(id,patch);
   if(ok) refreshLeadViews();
 }
-// Pop-up obrigatório ao agendar (data, horário, mapeamento) — o lead só sai de "A trabalhar" depois disso
+// Closers cadastrados, pro SDR escolher pra quem vai a reunião
+function closerOptions(sel){
+  const cs=getUsers().filter(u=>u.role==='closer');
+  return '<option value="">Escolher closer...</option>'+
+    cs.map(u=>`<option value="${u.id}"${String(sel||'')===String(u.id)?' selected':''}>${u.nome}</option>`).join('');
+}
+// Pop-up obrigatório ao agendar (closer, data, horário, mapeamento) — o lead só sai de "A trabalhar" depois disso
 function abrirAgendamento(id){
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
   abrirPrompt({
-    titulo:'Agendar reunião', sub:'Coloque o dia, o horário e cole o mapeamento. Tudo é obrigatório.',
+    titulo:'Agendar reunião', sub:'Escolha o closer, o dia, o horário e cole o mapeamento. Tudo é obrigatório.',
     campos:[
+      {key:'closer_id', type:'select', label:'Closer da reunião', options:closerOptions(l.closer_id), required:true},
       {key:'agendado_em', type:'date', label:'Dia da reunião', value:l.agendado_em||TODAY, required:true},
       {key:'agendado_hora', type:'time', label:'Horário', value:l.agendado_hora||'', required:true},
       {key:'mapeamento', type:'textarea', label:'Mapeamento do lead', value:l.mapeamento||'', required:true, ph:'Perfil, capital, terreno, quando pretende, travamento, observações...'},
     ],
     onSalvar: async(data)=>{
-      const ok=await saveLead(id,{agendou:true, atendeu:true, respondeu:true, agendado_em:data.agendado_em, agendado_hora:data.agendado_hora, mapeamento:data.mapeamento});
+      const ok=await saveLead(id,{agendou:true, atendeu:true, respondeu:true, closer_id:data.closer_id||null,
+        agendado_em:data.agendado_em, agendado_hora:data.agendado_hora, mapeamento:data.mapeamento,
+        sdr_status:'agendado', closer_status:'agendado'});
       if(ok) refreshLeadViews();
     }
   });
+}
+// Pop-up obrigatório ao desqualificar: sem motivo o lead não sai do fluxo
+function abrirDesqualificacao(id){
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  abrirPrompt({
+    titulo:'Desqualificar lead', sub:`${l.nome||'Esse lead'} sai do fluxo. Diga o motivo — é obrigatório.`,
+    campos:[
+      {key:'motivo', type:'select', label:'Motivo da desqualificação', required:true,
+       options:'<option value="">Escolher motivo...</option>'+
+         MOTIVOS_DESQ.map(m=>`<option value="${m[0]}"${l.motivo===m[0]?' selected':''}>${m[1]}</option>`).join('')},
+      {key:'map_obs', type:'textarea', label:'Detalhe (opcional)', value:'', ph:'O que aconteceu, se quiser registrar.'},
+    ],
+    onSalvar: async(data)=>{
+      const patch={sdr_status:'desqualificado', motivo:data.motivo, agendou:false, compareceu:false};
+      if(String(data.map_obs||'').trim()) patch.map_obs=data.map_obs;
+      const ok=await saveLead(id,patch);
+      if(ok) refreshLeadViews();
+    }
+  });
+}
+// Tira o lead da desqualificação e devolve pro fluxo
+async function requalificar(id){
+  const ok=await saveLead(id,{sdr_status:null, motivo:null});
+  if(ok) refreshLeadViews();
 }
 async function salvarAgendamento(id){
   const modal=$('#leadModal'); const scope=(modal&&!modal.hidden)?modal:document;
   const card=scope.querySelector(`.sdr-card[data-lead="${id}"]`)||document.querySelector(`.sdr-card[data-lead="${id}"]`); if(!card) return;
   const g=s=>card.querySelector(`[data-ag="${s}"]`)?.value||'';
-  const patch={ agendado_em:g('agendado_em')||TODAY, agendado_hora:g('agendado_hora'), mapeamento:g('mapeamento'), agendou:true, atendeu:true, respondeu:true };
+  const patch={ agendado_em:g('agendado_em')||TODAY, agendado_hora:g('agendado_hora'), mapeamento:g('mapeamento'), agendou:true, atendeu:true, respondeu:true, closer_id:g('closer_id')||null };
+  // Trocou data/hora de uma call que já existia: conta como remarcação
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id));
+  if(l&&l.agendado_em&&(String(l.agendado_em).slice(0,10)!==patch.agendado_em||String(l.agendado_hora||'')!==String(patch.agendado_hora||''))) patch.remarcado=true;
   const m=card.querySelector('.sdr-ag-msg'); if(m){m.style.color='var(--ink2)';m.textContent='Salvando...';}
   const ok=await saveLead(id,patch);
   if(ok){ if(m){ m.style.color='var(--ok)'; m.textContent='✓ agendamento salvo'; } setTimeout(()=>refreshLeadViews(),700); }
@@ -1278,12 +1660,12 @@ function openEsteiraLeadModal(id){
         <div class="sdr-card" data-lead="${l.id}"><div class="sdr-checks">${sdrChecksHTML(l)}</div>${sdrAgendHTML(l)}</div></div>`;
   m.innerHTML=`<div class="modal-card">
     <button class="modal-x" id="mClose">×</button>
-    <h2>${l.nome||'(sem nome)'}</h2>
+    <h2>${l.nome||'(sem nome)'}${leadFlagsHtml(l)}</h2>
     <div class="ml-grid">
       <div class="ml-row"><span>Etapa</span><b>${etapa}</b></div>
       <div class="ml-row"><span>Origem</span><b>${orig}</b></div>
       <div class="ml-row"><span>ICP</span><b>${l.icp?('ICP '+l.icp):(l.qualificado?'Qualificado':'—')}</b></div>
-      <div class="ml-row"><span>Telefone</span><b>${l.telefone||'—'}</b></div>
+      <div class="ml-row"><span>Telefone</span><b>${l.telefone?waTelHtml(l.telefone):'·'}</b></div>
       <div class="ml-row"><span>E-mail</span><b>${l.email||'—'}</b></div>
       ${l.agendado_em?`<div class="ml-row"><span>Call marcada</span><b>${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</b></div>`:''}
       ${me.role==='gestor'?`<div class="ml-row"><span>SDR</span><b>${sdrName}</b></div>`:''}
@@ -1298,6 +1680,8 @@ function openEsteiraLeadModal(id){
     m.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moverLeadSDR(l.id,b.dataset.mv));
     m.querySelectorAll('.sdr-chk').forEach(b=>b.onclick=()=>toggleSdrCheck(b.dataset.id,b.dataset.f));
     m.querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>salvarAgendamento(b.dataset.save));
+    m.querySelectorAll('[data-nshow]').forEach(b=>b.onclick=()=>marcarNoShow(b.dataset.nshow));
+    m.querySelectorAll('[data-remark]').forEach(b=>b.onclick=()=>abrirReagendamento(b.dataset.remark));
   }
 }
 
@@ -1318,12 +1702,13 @@ function renderCalendar(){
   if(isMgr)lg.innerHTML=`<b>Cada letra = uma pessoa.</b> &nbsp; <span class="who-chip done">A</span> preencheu &nbsp; <span class="who-chip miss">A</span> faltou &nbsp; <span class="who-chip pending">A</span> ainda não &nbsp;·&nbsp; passe o mouse pra ver o nome`;
   else lg.innerHTML=`<span class="dot dot-ok"></span> você preencheu &nbsp; <span class="dot dot-bad"></span> você faltou &nbsp; <span class="dot dot-none"></span> ainda não`;
   const initialOf=n=>(String(n).replace(/\(.*\)/,'').trim()[0]||'?').toUpperCase();
-  const START=TRAFFIC.daily.length?TRAFFIC.daily[0].date:TODAY;
+  const START='2026-07-06';   // kick-off da operação (segunda). Antes disso o calendário fica apagado.
   for(let d=1;d<=days;d++){
     const ds=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const tr=TRAFFIC.daily.find(x=>x.date===ds);
     const entries=getEntries().filter(e=>e.date===ds);
-    const countable=(ds>=START && ds<=TODAY);
+    const dow=new Date(ds+'T00:00:00').getDay();   // fim de semana é opcional: pode preencher, mas não conta como falta
+    const countable=(ds>=START && ds<=TODAY && dow!==0 && dow!==6);
     const cell=el('div','cal-cell'+(ds===TODAY?' today':''));
     let dots='',miss=false;
     if(isMgr){
@@ -1398,44 +1783,39 @@ function pipeCardHtml(c,{manage=false}={}){
     const pills=ETAPAS.map(s=>`<button class="stage-pill${s.k===et?' on':''}" data-id="${c.id}" data-stage="${s.k}" style="--sc:${s.color}">${s.label}</button>`).join('');
     controls=`<div class="stage-row">${pills}</div><div class="pipe-actions"><button data-act="excluir" data-id="${c.id}" class="btn-mini">🗑 Excluir</button></div>`;
   }
-  return `<div class="pipe-card st-${et}">
+  return `<div class="pipe-card st-${et}" data-pipe="${c.id}">
     <div class="pipe-top"><b>${c.lead_nome}</b> <span class="temp ${c.temperatura||'morno'}">${TEMP_LABEL[c.temperatura]||''}</span></div>
     <div class="pipe-prod">${prod}<span class="pipe-status et-${et}">${E.label}</span></div>
+    ${c.telefone?`<div class="pipe-mid">${waTelHtml(c.telefone)}</div>`:''}
     ${valLine}
     ${controls}</div>`;
 }
+// Painel de deals do closer no "Lançar dados": lista os deals do dc_pipeline do usuário
+// logado; clicar no card abre o modal de edição (openLeadModal).
 function renderCloserDeals(){
   const box=$('#closerDeals'); if(!box) return;
   const wrap=$('#lancarWrap');
-  // Painel antigo (dc_pipeline) desativado: o closer agora trabalha as calls na worklist da esteira.
-  box.hidden=true; if(wrap)wrap.classList.remove('two'); return;
   const me=curUser();
+  if(!me||me.role!=='closer'){ box.hidden=true; if(wrap)wrap.classList.remove('two'); return; }
   box.hidden=false; if(wrap)wrap.classList.add('two');
-  const cards=getPipeline().filter(c=>c.closer_id===me.id);
-  const P=computePipeline(cards);
-  const prodOpts=Object.entries(PRODUCTS).map(([k,p])=>`<option value="${k}">${p.label} · ${money(p.ticket)}</option>`).join('');
-  const listHtml=cards.length?cards.map(c=>pipeCardHtml(c,{manage:true})).join(''):'<p class="muted">Nenhum cliente ainda. Adicione o primeiro acima.</p>';
+  const cards=myPipeCards();
+  const abertos=pipeAbertos(cards);
+  const naMesa=abertos.reduce((s,c)=>s+(Number(c.valor_apresentado)||0),0);
+  const listHtml=cards.length?cards.map(c=>pipeCardHtml(c)).join(''):'<p class="muted" style="margin-top:10px">Nenhum deal ainda. Crie o primeiro no botão acima.</p>';
   box.innerHTML=`
-    <h2>Meus negócios · jornada do cliente</h2>
-    ${pipeKpiHtml(P)}
-    <form id="pipeForm" class="entry-form" style="margin:0 0 8px">
-      <label class="full">Cliente (nome)<input name="lead_nome" autocomplete="off" required></label>
-      <label>Produto<select name="produto">${prodOpts}</select></label>
-      <label>Temperatura<select name="temperatura"><option value="quente">Quente</option><option value="morno" selected>Morno</option><option value="frio">Frio</option></select></label>
-      <label>Valor proposto (R$)<input type="number" min="0" step="1" name="valor_apresentado"></label>
-      <button class="btn-primary full" type="submit">Adicionar cliente</button>
-      <p id="pipeMsg" class="entry-msg"></p>
-    </form>
-    <p class="muted" style="margin:4px 0 8px;font-size:12px">Clique numa etapa pra mover o cliente na jornada. Em <b>Fechado</b>, você informa o valor do contrato e quanto já coletou.</p>
+    <h2>Meus deals · jornada do cliente</h2>
+    <div class="sdr-filtros" style="margin:10px 0 0">
+      <button type="button" class="btn-mini ok" id="dealAddBtn">+ Novo deal</button>
+      <span class="muted sm">${intf(abertos.length)} em aberto · ${money(naMesa)} na mesa · clique no card pra editar</span>
+    </div>
     <div class="pipe-list">${listHtml}</div>`;
-  const f=$('#pipeForm'); if(f) f.onsubmit=pipeAdd;
-  box.querySelectorAll('.stage-pill').forEach(b=>b.onclick=()=>{const s=b.dataset.stage; if(s==='fechado') pipeFechar(b.dataset.id); else pipeSetEtapa(b.dataset.id,s);});
-  box.querySelectorAll('[data-act="excluir"]').forEach(b=>b.onclick=()=>pipeExcluir(b.dataset.id));
+  const add=$('#dealAddBtn'); if(add) add.onclick=openAddModal;
+  box.querySelectorAll('.pipe-card[data-pipe]').forEach(el2=>el2.onclick=()=>openLeadModal(el2.dataset.pipe));
 }
 function refreshPipelineViews(){ renderCloserDeals(); renderJornada(); renderGeral(); }
 async function pipeAdd(ev){
   ev.preventDefault();const me=curUser();const fd=new FormData(ev.target);
-  const rec={closer_id:me.id,lead_nome:(fd.get('lead_nome')||'').trim(),produto:fd.get('produto')||null,temperatura:fd.get('temperatura'),valor_apresentado:Number(fd.get('valor_apresentado')||0),etapa:'1a_call'};
+  const rec={closer_id:me.id,lead_nome:(fd.get('lead_nome')||'').trim(),produto:fd.get('produto')||null,temperatura:fd.get('temperatura'),telefone:(fd.get('telefone')||'').trim()||null,valor_apresentado:Number(fd.get('valor_apresentado')||0),etapa:'1a_call'};
   if(!rec.lead_nome)return;
   const msg=$('#pipeMsg');if(msg){msg.style.color='var(--ink2)';msg.textContent='Salvando...';}
   try{ const {error}=await sb.from('dc_pipeline').insert(rec); if(error)throw error;
@@ -1590,4 +1970,9 @@ function initSidebar(){
     if(session){ await loadAll(); showApp(); }
   }catch(e){ console.error(e); try{await sb.auth.signOut();}catch(_){} }
 })();
+
+// campanhas/funis em tempo real: re-busca a cada 60s quando a tela está visível
+setInterval(()=>{ try{
+  if($('#app') && !$('#app').hidden && $('#funnelPicker') && typeof renderFunil==='function') renderFunil();
+}catch(e){} }, 60_000);
 })();
