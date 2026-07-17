@@ -148,6 +148,19 @@ const pct=n=>!isFinite(n)||n==null?'—':(n).toLocaleString('pt-BR',{maximumFrac
 const intf=n=>(n||0).toLocaleString('pt-BR');
 const produtoLabel=p=>PRODUCTS[p]?PRODUCTS[p].label:'—';
 function lastNDates(n){const out=[];const base=new Date(TODAY+'T00:00:00');for(let i=n-1;i>=0;i--){const d=new Date(base);d.setDate(d.getDate()-i);out.push(d.toISOString().slice(0,10));}return out;}
+/* Dia do calendário de BRASÍLIA de um timestamp.
+   data_chegada é timestamptz e o Supabase devolve em UTC. Fatiar a string dava o dia UTC:
+   lead que chegou 21:10 de Brasília (00:10Z) contava como o dia SEGUINTE e sumia do "hoje"
+   do time. Todo lead do fim da tarde pra noite caía nesse buraco, todo dia.
+   -03:00 fixo: o Brasil não tem horário de verão desde 2019. */
+function diaBR(v){
+  if(!v) return '';
+  const s=String(v);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;         // já é dia puro (coluna date): não mexe.
+  const d=new Date(s);                                // senão new Date('2026-07-16') seria meia-noite
+  if(isNaN(d)) return s.slice(0,10);                  // UTC e o -3h jogaria pro dia anterior.
+  return new Date(d.getTime()-3*3600*1000).toISOString().slice(0,10);
+}
 function statusCls(val,key){const m=getMetas()[key];if(m==null||!isFinite(val)||val==null)return 'none';const up=m.dir==='up';return (up?val>=m.target:val<=m.target)?'ok':'bad';}
 
 // ---------- AGGREGATION (tráfego + comercial) ----------
@@ -188,7 +201,7 @@ function pipeScopeCards(){ return (ESTEIRA||[]).filter(l=>l.agendou); }
 // ---- Esteira (dc_leads): leads do SDR logado + gravação ----
 const isFieldRole = r => r==='sdr'||r==='social_seller';
 function myLeads(){ const me=curUser(); let ls=ESTEIRA||[]; if(me&&isFieldRole(me.role)) ls=ls.filter(l=>l.sdr_id===me.id); return ls; }
-function leadsInRange(ls){ const set=new Set(datesBetween(RANGE.start,RANGE.end)); return ls.filter(l=>{const d=(l.data_chegada||'').slice(0,10); return !set.size||set.has(d);}); }
+function leadsInRange(ls){ const set=new Set(datesBetween(RANGE.start,RANGE.end)); return ls.filter(l=>{const d=diaBR(l.data_chegada); return !set.size||set.has(d);}); }
 async function saveLead(id,patch){
   patch.updated_at=new Date().toISOString(); patch.updated_by=curUser()?.login||'';
   const {error}=await sb.from('dc_leads').update(patch).eq('id',id).select();
@@ -337,7 +350,7 @@ function drawChart(id,type,labels,datasets,opts){
 function renderMeuFunil(){
   const pane=$('#sub-geral'); if(!pane) return;
   const all=myLeads(), inR=leadsInRange(all);
-  const hoje=all.filter(l=>(l.data_chegada||'').slice(0,10)===TODAY);
+  const hoje=all.filter(l=>diaBR(l.data_chegada)===TODAY);
   const cnt=(arr,f)=>arr.filter(f).length;
   const steps=[
     ['Chegaram', inR.length, '#3b82f6'],
@@ -460,8 +473,8 @@ function openJornadaProdutoModal(k){
 
 // ===== Sub-aba FUNIL DE VENDA (seletor de funil -> funil comercial + custos + árvore de campanhas) =====
 const DC_METRICS_API='https://steio.vercel.app/api/dc-metrics';
-const FUNIS_VENDA=['Formulário V1','Formulário V3','Typebot','Página (Site)','Social Selling','Link da Bio'];
-const FUNIL_APELIDO={'Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
+const FUNIS_VENDA=['Formulário V1','Formulário V3','Formulário V4','Typebot','Página (Site)','Social Selling','Link da Bio'];
+const FUNIL_APELIDO={'Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Formulário V4':'Formulário V4','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
 const STEP_DEFS=[['leads','Chegaram','#3b82f6'],['qualificados','Qualificados','#6366f1'],['responderam','Responderam','#8b5cf6'],['agendaram','Agendaram','#a855f7'],['compareceram','Compareceram','#0ea5e9'],['venderam','Vendas','#22c55e']];
 let _dcCache={key:'',data:null};
 let SELFUNIL='Formulário V1';
@@ -723,7 +736,7 @@ function renderJornadaSDR(){
   const leads=base.filter(l=>{
     if(antigoPendente(l)) return false;                 // pendente só aparece em "Leads Antigos"
     if(l.antigo) return true;                           // antigo já trabalhado entra no fluxo normal, sem filtro de data
-    const d=(l.data_chegada||'').slice(0,10); return !dateSet.size||dateSet.has(d);
+    const d=diaBR(l.data_chegada); return !dateSet.size||dateSet.has(d);
   });
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=SDR_ETAPAS.map(E=>{const n=leads.filter(l=>sdrEtapa(l)===E.k).length;
@@ -733,7 +746,7 @@ function renderJornadaSDR(){
   board.classList.remove('jb-sdr','jb-closer');
   const antCard=l=>{
     const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'·';
-    const dc=(l.data_chegada||'').slice(0,10);
+    const dc=diaBR(l.data_chegada);
     const nm=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
     return `<div class="jcard jcard-antigo" data-lid="${l.id}" data-nome="${(l.nome||'').toLowerCase()}" draggable="${canMove}">
       <b class="jopen">${l.nome||'(sem nome)'}</b>
@@ -1440,7 +1453,7 @@ function renderSDRLancar(){
   lbl.innerHTML=`Seus leads · <b>marque o que já fez em cada um</b>`;
   let leads=myLeads().slice().sort((a,b)=>(b.data_chegada||'').localeCompare(a.data_chegada||''));
   const nAntigos=leads.filter(l=>antigoPendente(l)&&l.sdr_status!=='perdido').length;
-  if(SDR_FILTRO==='hoje') leads=leads.filter(l=>(l.data_chegada||'').slice(0,10)===TODAY);
+  if(SDR_FILTRO==='hoje') leads=leads.filter(l=>diaBR(l.data_chegada)===TODAY);
   else if(SDR_FILTRO==='pendentes') leads=leads.filter(l=>!l.agendou&&!l.compareceu&&l.sdr_status!=='perdido'&&!antigoPendente(l));   // antigos pendentes têm categoria própria
   else if(SDR_FILTRO==='antigos') leads=leads.filter(l=>antigoPendente(l)&&l.sdr_status!=='perdido');   // importados ainda sem interação
   const chip=(k,t)=>`<button type="button" class="sdr-fil ${SDR_FILTRO===k?'on':''}" data-fil="${k}">${t}</button>`;
@@ -1484,7 +1497,7 @@ function sdrAgendHTML(l){ return l.agendou ? `<div class="sdr-agend">
     </div>` : ''; }
 function sdrLeadCard(l){
   const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'—';
-  const dc=(l.data_chegada||'').slice(0,10);
+  const dc=diaBR(l.data_chegada);
   return `<div class="sdr-card" data-lead="${l.id}" data-nome="${(l.nome||'').toLowerCase()}">
     <div class="sdr-card-head">
       <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:(l.qualificado?'<span class="badge ok">ICP</span>':'')}${l.antigo?' <span class="badge antigo">antigo</span>':''}${leadFlagsHtml(l)}</div>
