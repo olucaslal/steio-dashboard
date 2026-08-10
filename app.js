@@ -161,6 +161,9 @@ function diaBR(v){
   if(isNaN(d)) return s.slice(0,10);                  // UTC e o -3h jogaria pro dia anterior.
   return new Date(d.getTime()-3*3600*1000).toISOString().slice(0,10);
 }
+// presença por atividade: a pessoa "lançou o dia" se mexeu em algum lead nesse dia
+// (updated_by = login dela). Assim mover/atualizar lead já pinta o calendário, sem formulário.
+function ativoNoDia(login, ds){ if(!login) return false; return (ESTEIRA||[]).some(l=>l.updated_by===login && diaBR(l.updated_at)===ds); }
 function statusCls(val,key){const m=getMetas()[key];if(m==null||!isFinite(val)||val==null)return 'none';const up=m.dir==='up';return (up?val>=m.target:val<=m.target)?'ok':'bad';}
 
 // ---------- AGGREGATION (tráfego + comercial) ----------
@@ -210,11 +213,16 @@ async function saveLead(id,patch){
   return true;
 }
 // Todas leem leads da esteira (dc_leads): vendeu / valor / valor_proposto / produto / vendido_em / closerEtapa.
+// valor da venda: na esteira o closer preenche 'valor_proposto'; o campo 'valor' quase nunca é gravado.
+// Pra uma venda fechada, o valor é o que foi proposto (fecharam nesse preço) — fallback pra não zerar o dash.
+const vVenda = l => Number(l.valor) || Number(l.valor_proposto) || 0;
+// cash collect: o que de fato entrou (entrada). Sem valor_coletado gravado, cai no valor da venda (comportamento antigo).
+const vColeta = l => (l.valor_coletado==null||l.valor_coletado==='') ? vVenda(l) : (Number(l.valor_coletado)||0);
 function computePipeline(cards){
   const m={naMesa:0, contratado:0, coletado:0, fechados:0, perdidos:0, abertos:0, total:cards.length};
   for(const l of cards){
     const et=closerEtapa(l);
-    if(et==='fechado'){ m.fechados++; const v=Number(l.valor)||0; m.contratado+=v; m.coletado+=v; }
+    if(et==='fechado'){ m.fechados++; const v=vVenda(l); m.contratado+=v; m.coletado+=vColeta(l); }
     else if(et==='perdido'){ m.perdidos++; }
     else { m.abertos++; m.naMesa+=Number(l.valor_proposto)||0; }
   }
@@ -224,21 +232,22 @@ function computePipeline(cards){
 }
 function fechadosIn(cards,dateSet){let count=0,contratado=0,coletado=0;
   for(const l of cards){ const d=l.vendido_em?String(l.vendido_em).slice(0,10):null;
-    if(l.vendeu&&d&&dateSet.has(d)){count++;const v=Number(l.valor)||0;contratado+=v;coletado+=v;} }
+    if(l.vendeu&&d&&dateSet.has(d)){count++;const v=vVenda(l);contratado+=v;coletado+=vColeta(l);} }
   return {count,contratado,coletado};}
 function pipeByDay(cards,dates){
   const idx=Object.fromEntries(dates.map(d=>[d,{contratos:0,contratado:0,coletado:0}]));
-  for(const l of cards){ if(!l.vendeu||!l.vendido_em)continue; const r=idx[String(l.vendido_em).slice(0,10)]; if(r){r.contratos++;const v=Number(l.valor)||0;r.contratado+=v;r.coletado+=v;} }
+  for(const l of cards){ if(!l.vendeu||!l.vendido_em)continue; const r=idx[String(l.vendido_em).slice(0,10)]; if(r){r.contratos++;const v=vVenda(l);r.contratado+=v;r.coletado+=vColeta(l);} }
   return dates.map(d=>({date:d,...idx[d]}));
 }
-function pipeByTicket(cards){
+function pipeByTicket(cards,dateSet){
   const out={}; for(const k of Object.keys(PRODUCTS)) out[k]={count:0,contratado:0,coletado:0,emJornada:0,naMesa:0};
   for(const l of cards){ const p=l.produto; if(!p||!out[p])continue;
-    if(l.vendeu){out[p].count++;const v=Number(l.valor)||0;out[p].contratado+=v;out[p].coletado+=v;}
+    if(l.vendeu){ const d=l.vendido_em?String(l.vendido_em).slice(0,10):null;
+      if(!dateSet||(d&&dateSet.has(d))){ out[p].count++;const v=vVenda(l);out[p].contratado+=v;out[p].coletado+=vColeta(l); } }
     else if(closerEtapa(l)!=='perdido'){out[p].emJornada++;} }
   // "Em jornada" também conta os deals em aberto do dc_pipeline (todos os closers);
   // "na mesa" = soma do valor_apresentado desses deals abertos por produto
-  for(const c of getPipeline()){ const p=c.produto; if(!p||!out[p])continue;
+  for(const c of pipeScoped()){ const p=c.produto; if(!p||!out[p])continue;
     if(ETAPAS_ABERTAS.includes(c.etapa||'1a_call')){ out[p].emJornada++; out[p].naMesa+=Number(c.valor_apresentado)||0; } }
   return out;
 }
@@ -248,6 +257,13 @@ let RANGE={start:'',end:''};
 function addDays(ds,delta){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+delta);return d.toISOString().slice(0,10);}
 function datesBetween(start,end){const out=[];if(!start||!end||start>end)return out;let d=new Date(start+'T00:00:00');const e=new Date(end+'T00:00:00');while(d<=e){out.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}return out;}
 function presetRange(p){if(p==='hoje')return{start:TODAY,end:TODAY};if(p==='ontem'){const y=addDays(TODAY,-1);return{start:y,end:y};}const n=Number(p);return{start:addDays(TODAY,-(n-1)),end:TODAY};}
+// Período selecionado -> conjunto de datas, rótulo legível e datas p/ os gráficos.
+function rangeSet(){ return new Set(datesBetween(RANGE.start,RANGE.end)); }
+function rangeLabel(){ if(!RANGE.start||!RANGE.end) return '';
+  if(RANGE.start===RANGE.end) return RANGE.start===TODAY?'hoje':fmtDate(RANGE.start);
+  const n=datesBetween(RANGE.start,RANGE.end).length;
+  return RANGE.end===TODAY?`últimos ${n} dias`:`${fmtDate(RANGE.start)}–${fmtDate(RANGE.end)}`; }
+function periodDates(){ let ds=datesBetween(RANGE.start,RANGE.end); if(!ds.length) ds=lastNDates(8); return ds.length>45?ds.slice(-45):ds; }
 
 function renderDashboard(){
   renderGeral();
@@ -259,7 +275,7 @@ function refreshRangeViews(){
   const r=curUser()?.role;
   if(isFieldRole(r)){ renderGeral(); renderJornada(); }
   else if(r==='closer'){ renderGeral(); renderFunil(); renderJornada(); }
-  else renderFunil();
+  else { renderGeral(); renderFunil(); }
 }
 
 // ===== Sub-aba GERAL =====
@@ -267,23 +283,47 @@ function renderGeral(){
   const r=curUser()?.role;
   if(isFieldRole(r)) return renderMeuFunil();
   if(r==='closer') return renderCloserGeral();
-  const cards=pipeScopeCards();
+  renderCloserFiltro('closerFiltro');
+  const cards=scopeCloser(pipeScopeCards());
+  const fPer=fechadosIn(cards,rangeSet());
   const fHoje=fechadosIn(cards,new Set([TODAY]));
-  const fSemana=fechadosIn(cards,new Set(lastNDates(7)));
-  const P=computePipeline(cards);
-  // Dinheiro na mesa global: deals em aberto do dc_pipeline, todos os closers
-  const pipeAb=pipeAbertos(getPipeline());
+  const perTicket=fPer.count?fPer.contratado/fPer.count:0;
+  const perLbl=rangeLabel();
+  // Dinheiro na mesa: deals em aberto do dc_pipeline (respeita o filtro de closer)
+  const pipeAb=pipeAbertos(pipeScoped());
   const pipeMesa=pipeAb.reduce((s,c)=>s+(Number(c.valor_apresentado)||0),0);
   const kg=$('#finKpis');
   if(kg) kg.innerHTML=`
     <div class="kpi none kpi-mesa"><div class="k-label">Dinheiro na mesa</div><div class="k-val">${money(pipeMesa)}</div><div class="k-meta">${intf(pipeAb.length)} deals em aberto</div></div>
-    <div class="kpi none kpi-cash"><div class="k-label">Vendas hoje</div><div class="k-val">${intf(fHoje.count)}</div><div class="k-meta">${money(fHoje.contratado)} em contrato</div></div>
-    <div class="kpi none kpi-cash"><div class="k-label">Vendas semana</div><div class="k-val">${intf(fSemana.count)}</div><div class="k-meta">${money(fSemana.contratado)} em contrato</div></div>
-    <div class="kpi none kpi-money"><div class="k-label">Cash collect hoje</div><div class="k-val">${money(fHoje.coletado)}</div><div class="k-meta">entrou no caixa</div></div>
-    <div class="kpi none kpi-money"><div class="k-label">Cash collect semana</div><div class="k-val">${money(fSemana.coletado)}</div><div class="k-meta">entrou no caixa</div></div>
-    <div class="kpi none"><div class="k-label">Ticket médio</div><div class="k-val">${money(P.ticketMedio)}</div><div class="k-meta">por contrato fechado</div></div>`;
+    <div class="kpi none kpi-cash"><div class="k-label">Vendas no período</div><div class="k-val">${intf(fPer.count)}</div><div class="k-meta">${money(fPer.contratado)} em contrato · ${perLbl}</div></div>
+    <div class="kpi none kpi-money"><div class="k-label">Cash collect no período</div><div class="k-val">${money(fPer.coletado)}</div><div class="k-meta">entrou no caixa · ${perLbl}</div></div>
+    <div class="kpi none kpi-money"><div class="k-label">Cash collect hoje</div><div class="k-val">${money(fHoje.coletado)}</div><div class="k-meta">entrou hoje</div></div>
+    <div class="kpi none"><div class="k-label">Ticket médio</div><div class="k-val">${money(perTicket)}</div><div class="k-meta">por contrato · ${perLbl}</div></div>`;
   renderCharts(cards);
   renderTicketCards(cards);
+}
+
+// ===== Filtro de CLOSER (compartilhado: aba Geral + Jornada do closer) =====
+let CLOSER_SEL='todos'; // 'todos' | <closer_id>
+// closers que aparecem em algum deal (pipeline ou esteira)
+function closersDisponiveis(){
+  const ids=new Set();
+  getPipeline().forEach(c=>{ if(c.closer_id) ids.add(String(c.closer_id)); });
+  (ESTEIRA||[]).forEach(l=>{ if(l.closer_id) ids.add(String(l.closer_id)); });
+  return [...ids].map(id=>({ id, nome:(getUsers().find(u=>String(u.id)===id)||{}).nome||'—' }))
+    .sort((a,b)=>a.nome.localeCompare(b.nome));
+}
+// getPipeline() já filtrado pelo closer selecionado
+function pipeScoped(){ const p=getPipeline(); return CLOSER_SEL==='todos'?p:p.filter(c=>String(c.closer_id)===CLOSER_SEL); }
+// filtra uma lista de leads (dc_leads) pelo closer selecionado
+function scopeCloser(ls){ return CLOSER_SEL==='todos'?ls:(ls||[]).filter(l=>String(l.closer_id)===CLOSER_SEL); }
+// barra de botões do filtro (Todos + cada closer). elId = id do container.
+function renderCloserFiltro(elId){
+  const el=$('#'+elId); if(!el) return;
+  const cs=closersDisponiveis();
+  el.innerHTML=`<span class="cf-lbl">Closer:</span>`+[{id:'todos',nome:'Todos'}].concat(cs).map(c=>
+    `<button type="button" class="cf-btn${CLOSER_SEL===c.id?' on':''}" data-c="${c.id}">${c.nome}</button>`).join('');
+  el.querySelectorAll('.cf-btn').forEach(b=>b.addEventListener('click',()=>{ CLOSER_SEL=b.dataset.c; renderGeral(); renderJornada(); }));
 }
 
 let _charts={};
@@ -412,7 +452,7 @@ function renderFunnelBars(wrap, steps){
   }));
 }
 function renderCharts(cards){
-  const dates=lastNDates(8), labels=dates.map(fmtDate), s=pipeByDay(cards,dates);
+  const dates=periodDates(), labels=dates.map(fmtDate), s=pipeByDay(cards,dates);
   drawChart('chartContratos','bar',labels,[{label:'Contratos',data:s.map(x=>x.contratos),backgroundColor:barGrad('#f0d68a','#a5762a'),borderColor:'#e5c46a',borderWidth:1,borderRadius:7,maxBarThickness:28}]);
   drawChart('chartValor','line',labels,[
     {label:'Contratado',data:s.map(x=>x.contratado),borderColor:'#e5c46a',pointBackgroundColor:'#e5c46a',pointBorderColor:cssVar('--card'),fill:true,tension:.42},
@@ -421,7 +461,7 @@ function renderCharts(cards){
 }
 function renderTicketCards(cards){
   const grid=$('#ticketCards'); if(!grid) return;
-  const by=pipeByTicket(cards);
+  const by=pipeByTicket(cards,rangeSet());
   grid.innerHTML=`<div class="ticket-card donut-card"><div class="chart-box"><canvas id="chartTickets"></canvas></div></div>`+
     Object.entries(PRODUCTS).map(([k,p])=>{const d=by[k];
     return `<div class="ticket-card">
@@ -474,10 +514,30 @@ function openJornadaProdutoModal(k){
 // ===== Sub-aba FUNIL DE VENDA (seletor de funil -> funil comercial + custos + árvore de campanhas) =====
 const DC_METRICS_API='https://steio.vercel.app/api/dc-metrics';
 const FUNIS_VENDA=['Formulário V1','Formulário V3','Formulário V4','Typebot','Página (Site)','Social Selling','Link da Bio'];
-const FUNIL_APELIDO={'Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Formulário V4':'Formulário V4','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
+// "Geral" soma os funis de captação paga; NÃO entram Social Selling nem Link da Bio.
+const GERAL_FUNIS=['Formulário V1','Formulário V3','Formulário V4','Typebot','Página (Site)'];
+const FUNIL_APELIDO={'Geral':'Geral','Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Formulário V4':'Formulário V4','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
 const STEP_DEFS=[['leads','Chegaram','#3b82f6'],['qualificados','Qualificados','#6366f1'],['responderam','Responderam','#8b5cf6'],['agendaram','Agendaram','#a855f7'],['compareceram','Compareceram','#0ea5e9'],['venderam','Vendas','#22c55e']];
 let _dcCache={key:'',data:null};
-let SELFUNIL='Formulário V1';
+let SELFUNIL='Geral';
+
+// soma os funis de venda (Geral) e recalcula as taxas/custos
+function somaFunis(d, nomes){
+  const raw=['leads','qualificados','responderam','agendaram','compareceram','venderam','faturamento','spend','impressions','metaLeads'];
+  const a={}; raw.forEach(k=>a[k]=0);
+  for(const nome of nomes){ const f=(d.funis||[]).find(x=>x.nome===nome); if(!f)continue; raw.forEach(k=>a[k]+=(+f[k]||0)); }
+  const base=a.leads||a.metaLeads;
+  return { ...a, nome:'Geral',
+    cpl: base? +(a.spend/base).toFixed(2):null,
+    cpm: a.impressions? +(a.spend/(a.impressions/1000)).toFixed(2):null,
+    custoAgendamento: a.agendaram? +(a.spend/a.agendaram).toFixed(2):null,
+    custoVenda: a.venderam? +(a.spend/a.venderam).toFixed(2):null };
+}
+function dadosFunil(d, nome){ return nome==='Geral' ? somaFunis(d, GERAL_FUNIS) : ((d.funis||[]).find(x=>x.nome===nome)||{}); }
+function arvoreFunil(d, nome){
+  if(nome==='Geral') return GERAL_FUNIS.flatMap(f=>(d.arvore||{})[f]||[]).sort((x,y)=>(y.spend||0)-(x.spend||0));
+  return (d.arvore||{})[nome]||[];
+}
 
 async function renderFunil(){
   if(curUser()?.role==='closer') return renderCloserFunil();
@@ -492,10 +552,10 @@ async function renderFunil(){
     try{ d=await (await fetch(`${DC_METRICS_API}?since=${since}&until=${until}`,{cache:'no-store'})).json(); _dcCache={key,data:d,ts:Date.now()}; }
     catch(e){ if(temAntigo){ d=_dcCache.data; } else { if(kg) kg.innerHTML='<div class="muted sm" style="padding:10px">Não consegui carregar os funis agora.</div>'; return; } }
   }
-  // seletor de funil
-  pick.innerHTML=FUNIS_VENDA.map(nome=>{
-    const f=(d.funis||[]).find(x=>x.nome===nome)||{};
-    return `<button class="fpick ${nome===SELFUNIL?'on':''}" data-funil="${nome}">
+  // seletor de funil: "Geral" primeiro (soma dos funis de captação), depois cada um
+  pick.innerHTML=['Geral', ...FUNIS_VENDA].map(nome=>{
+    const f=dadosFunil(d, nome);
+    return `<button class="fpick ${nome===SELFUNIL?'on':''}${nome==='Geral'?' fpick-geral':''}" data-funil="${nome}">
       <span class="fp-name">${FUNIL_APELIDO[nome]}</span>
       <span class="fp-sub">${intf(f.leads||0)} leads · ${money(f.spend)}</span></button>`;
   }).join('');
@@ -504,7 +564,7 @@ async function renderFunil(){
 }
 
 function renderFunilSelecionado(d){
-  const f=(d.funis||[]).find(x=>x.nome===SELFUNIL)||{};
+  const f=dadosFunil(d, SELFUNIL);
   $('#funnelPicker')?.querySelectorAll('.fpick').forEach(b=>b.classList.toggle('on',b.dataset.funil===SELFUNIL));
 
   // KPIs do funil (parecido com o tráfego)
@@ -545,7 +605,7 @@ function renderFunilSelecionado(d){
       wf.appendChild(row);
     });
   }
-  renderCampTree((d.arvore||{})[SELFUNIL]||[]);
+  renderCampTree(arvoreFunil(d, SELFUNIL));
 }
 
 // Árvore campanha -> conjunto -> anúncio (drill-down estilo Facebook Ads)
@@ -691,7 +751,15 @@ function sdrEtapa(l){
   return'chegaram';
 }
 let JVIEW=null;  // 'sdr' | 'closer'
-let JQ='';       // busca por nome na jornada
+let JQ='';       // busca por qualquer campo do lead (nome, e-mail, telefone) na jornada
+// haystack de busca: junta nome, e-mail e telefone (cru + só dígitos) pra achar lead por qualquer info
+function buscaHay(o){ if(!o) return '';
+  const tel=String(o.telefone||''); const telNum=tel.replace(/\D/g,'');
+  return [o.nome,o.lead_nome,o.email,o.lead_email,tel,telNum].filter(Boolean).join(' ').toLowerCase().replace(/["<>]/g,' '); }
+function hayMatch(hay,q){ q=String(q||'').trim().toLowerCase(); if(!q) return true;
+  hay=String(hay||''); if(hay.includes(q)) return true;
+  const qd=q.replace(/\D/g,''); return qd.length>=4 && hay.replace(/\D/g,'').includes(qd); }
+function buscaMatch(o,q){ return hayMatch(buscaHay(o),q); }
 function renderJornada(){
   const me=curUser(); if(!me) return;
   // define a visão conforme o papel (gestor pode alternar)
@@ -710,27 +778,56 @@ function renderJornada(){
         ? `<span class="muted sm">Seus negócios: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`
         : `<span class="muted sm">Suas calls: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`);
     const search = (me.role==='gestor'||me.role==='sdr'||me.role==='social_seller'||me.role==='closer')
-      ? `<input type="search" id="jBusca" class="lead-busca" placeholder="buscar lead" value="${JQ}">` : '';
+      ? `<input type="search" id="jBusca" class="lead-busca" placeholder="nome, e-mail ou telefone" value="${JQ}">` : '';
     const addBtn = me.role==='closer'
       ? `<button type="button" class="btn-mini ok" id="jAddBtn">+ Novo deal</button>`
       : (JVIEW==='sdr' ? `<button type="button" class="btn-mini ok" id="jAddLeadBtn">+ Cadastrar lead</button>` : '');
-    tools.innerHTML = toggle + addBtn + search + hint;
+    const closerFil = (me.role==='gestor'&&JVIEW==='closer') ? '<div class="closer-fil" id="closerFiltroJ"></div>' : '';
+    tools.innerHTML = toggle + addBtn + search + hint + closerFil;
+    if($('#closerFiltroJ')) renderCloserFiltro('closerFiltroJ');
     tools.querySelectorAll('.jt').forEach(b=>b.onclick=()=>{ JVIEW=b.dataset.v; renderJornada(); });
     const add=$('#jAddBtn'); if(add) add.onclick=openAddModal;
     const addL=$('#jAddLeadBtn'); if(addL) addL.onclick=openAddLeadModal;
     const jb=$('#jBusca'); if(jb){ jb.oninput=()=>{ JQ=jb.value; if(JVIEW==='sdr') renderJornadaSDR(); else renderJornadaCloserView(); const f=$('#jBusca'); if(f){f.focus();f.setSelectionRange(f.value.length,f.value.length);} }; }
   }
+  renderJornadaAviso();
   if(JVIEW==='sdr') renderJornadaSDR(); else renderJornadaCloserView();
 }
 // Lead antigo (importado das planilhas, antigo=true) ainda sem interação do SDR
 function antigoPendente(l){ return !!l.antigo && sdrEtapa(l)==='chegaram'; }
+// Um agendamento está "completo" pro closer quando o SDR já deixou o mapeamento
+function temMapa(l){
+  return !!((l.map_perfil||'').trim()||(l.map_capital||'').trim()||(l.map_terreno||'').trim()
+    ||(l.map_quando||'').trim()||(l.map_travamento||'').trim()||(l.mapeamento||'').trim());
+}
+// Aviso: agendamentos que já estão na agenda do closer mas ainda sem o mapeamento do SDR.
+// Auto-limpa quando o SDR preenche. Não escreve nada — só lê o estado.
+function renderJornadaAviso(){
+  const box=$('#jornadaAviso'); if(!box) return;
+  const me=curUser(); if(!me){ box.hidden=true; box.innerHTML=''; return; }
+  const cut=addDays(TODAY,-10);   // foca no que o closer ainda vai/acabou de atender
+  let base=(ESTEIRA||[]).filter(l=>l.agendou&&l.agendado_em&&String(l.agendado_em).slice(0,10)>=cut&&!temMapa(l)&&!desqualificado(l));
+  if(me.role==='sdr'||me.role==='social_seller') base=base.filter(l=>String(l.sdr_id)===String(me.id));
+  else if(me.role==='closer') base=base.filter(l=>l.closer_id==null||String(l.closer_id)===String(me.id));
+  if(!base.length){ box.hidden=true; box.innerHTML=''; return; }
+  base.sort((a,b)=>String(a.agendado_em).localeCompare(String(b.agendado_em)));
+  const names=base.map(l=>`<b>${l.nome||'(sem nome)'}</b> <span class="muted">${fmtDate(String(l.agendado_em).slice(0,10))}${l.agendado_hora?' '+l.agendado_hora:''}</span>`).join(' · ');
+  const ehSdr=(me.role==='sdr'||me.role==='social_seller');
+  const sub=ehSdr
+    ? 'Preencha o mapeamento (perfil, capital, terreno, quando, travamento) pra o closer entrar preparado na call.'
+    : 'Foram pré-cadastrados na agenda pra não deixar o closer sem lead. O SDR ainda precisa preencher o mapeamento de cada um.';
+  box.innerHTML=`<div class="ja-top">⚠️ ${base.length} agendamento${base.length>1?'s':''} aguardando o mapeamento do SDR</div>
+    <div class="ja-names">${names}</div>
+    <div class="ja-sub">${sub}</div>`;
+  box.hidden=false;
+}
 function renderJornadaSDR(){
   const board=$('#jornadaBoard'); if(!board) return;
   const me=curUser();
   const dateSet=new Set(datesBetween(RANGE.start,RANGE.end));
   let base=(ESTEIRA||[]);
   if(me.role==='sdr'||me.role==='social_seller') base=base.filter(l=>l.sdr_id===me.id);
-  if(JQ.trim()){ const q=JQ.trim().toLowerCase(); base=base.filter(l=>(l.nome||'').toLowerCase().includes(q)); }
+  if(JQ.trim()) base=base.filter(l=>buscaMatch(l,JQ));
   // Coluna "Leads Antigos": antigo=true sem interação, ignora o filtro de período (datas de abr-jun)
   const antigos=base.filter(l=>antigoPendente(l)&&l.sdr_status!=='perdido');
   const leads=base.filter(l=>{
@@ -748,7 +845,7 @@ function renderJornadaSDR(){
     const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'·';
     const dc=diaBR(l.data_chegada);
     const nm=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
-    return `<div class="jcard jcard-antigo" data-lid="${l.id}" data-nome="${(l.nome||'').toLowerCase()}" draggable="${canMove}">
+    return `<div class="jcard jcard-antigo" data-lid="${l.id}" data-nome="${buscaHay(l)}" draggable="${canMove}">
       <b class="jopen">${l.nome||'(sem nome)'}</b>
       <div class="jcard-foot"><span class="badge antigo">antigo</span>${waChipHtml(l.telefone)}${nm?`<span class="muted">${nm}</span>`:''}</div>
       <div class="muted sm" style="margin-top:5px">${orig}${dc?` · ${fmtDate(dc)}`:''}</div>
@@ -757,19 +854,20 @@ function renderJornadaSDR(){
   const antBody=antigos.length?antigos.map(antCard).join(''):'<p class="muted sm">nenhum lead antigo pendente</p>';
   const antCol=`<div class="jcol jcol-antigos">
     <div class="jcol-head" style="--sc:#64748b">Leads Antigos <span id="antCount">${antigos.length}</span></div>
-    <div class="ant-tools"><input type="search" id="antBusca" class="lead-busca ant-busca" placeholder="buscar antigo"></div>
+    <div class="ant-tools"><input type="search" id="antBusca" class="lead-busca ant-busca" placeholder="nome, e-mail ou telefone"></div>
     <div class="jcol-body">${antBody}</div>
   </div>`;
   board.innerHTML=antCol+SDR_ETAPAS.map(E=>{
     const cs=leads.filter(l=>sdrEtapa(l)===E.k);
     const body=cs.length?cs.map(l=>{
       const sdrName=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
+      const closerName=(isMgr&&l.closer_id)?((getUsers().find(u=>u.id===l.closer_id)||{}).nome||''):'';
       const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'—';
       const extra = l.agendou&&l.agendado_em ? `<div class="jcard-cash" style="color:var(--purple)">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` ${l.agendado_hora}`:''}</div>` : '';
       const fl=leadFlagsHtml(l);
       return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}">
         <b class="jopen">${l.nome||'(sem nome)'}</b>
-        <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.qualificado?'ICP '+(l.icp||'✓'):'a qualificar'}</span>${waChipHtml(l.telefone)}${sdrName?`<span class="muted">${sdrName}</span>`:''}</div>
+        <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.qualificado?'ICP '+(l.icp||'✓'):'a qualificar'}</span>${waChipHtml(l.telefone)}${sdrName?`<span class="muted">${sdrName}</span>`:''}${closerName?`<span class="jclose">Closer: ${closerName}</span>`:''}</div>
         ${fl?`<div class="jflags">${fl}</div>`:''}
         <div class="muted sm" style="margin-top:5px">${orig}</div>${extra}
       </div>`;}).join(''):'<p class="muted sm">sem leads</p>';
@@ -790,7 +888,7 @@ function renderJornadaSDR(){
   // Busca local da coluna Leads Antigos (filtra sem re-render, contador acompanha)
   const ab=$('#antBusca');
   if(ab){ ab.oninput=()=>{ const q=ab.value.trim().toLowerCase(); let n=0;
-    board.querySelectorAll('.jcard-antigo').forEach(c=>{ const hit=!q||(c.dataset.nome||'').includes(q); c.style.display=hit?'':'none'; if(hit)n++; });
+    board.querySelectorAll('.jcard-antigo').forEach(c=>{ const hit=hayMatch(c.dataset.nome,q); c.style.display=hit?'':'none'; if(hit)n++; });
     const cnt=$('#antCount'); if(cnt) cnt.textContent=n; }; }
 }
 function sdrStagePatch(stage){
@@ -925,6 +1023,7 @@ function abrirReagendamento(id,{aposNoShow=false}={}){
 async function moverLeadCloser(id,stage){
   if(stage==='noshow'){ marcarNoShow(id); return; }
   if(stage==='realizada'||stage==='segunda'){ abrirResumoReuniao(id,stage); return; }
+  if(stage==='fechado'){ abrirFechamento(id); return; }
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
   const patch=closerStagePatch(stage);
   const me=curUser(); if(me.role==='closer' && l.closer_id==null) patch.closer_id=me.id;
@@ -937,7 +1036,12 @@ function closerControlsInner(l){
   const prodOpts=['<option value="">Produto…</option>'].concat(Object.entries(PRODUCTS).map(([k,p])=>`<option value="${k}"${l.produto===k?' selected':''}>${p.label}</option>`)).join('');
   const meetingDone = !['agendada','noshow'].includes(cur);   // reunião aconteceu -> pede o resumo
   const resumoField = meetingDone ? `<label class="full">Resumo da call <small class="muted">(obrigatório após a reunião)</small><textarea data-cf="resumo_call" rows="3" placeholder="Como foi a call, dores, objeções, próximos passos...">${l.resumo_call||''}</textarea></label>` : '';
-  const vendaField = (cur==='fechado') ? `<label class="full">Valor da venda (R$)<input type="number" min="0" step="100" data-cf="valor" value="${l.valor||''}"></label>` : '';
+  const vendaField = (cur==='fechado') ? `
+      <div class="cf-row">
+        <label>Valor fechado (R$)<input type="number" min="0" step="100" data-cf="valor" value="${l.valor||''}"></label>
+        <label>Entrada paga (R$)<input type="number" min="0" step="100" data-cf="valor_coletado" value="${l.valor_coletado??''}"></label>
+      </div>
+      <label class="full">Acordo de pagamento<textarea data-cf="acordo" rows="2" placeholder="Ex: R$ 15k entrada, R$ 49k dia 23">${l.acordo||''}</textarea></label>` : '';
   const map = l.mapeamento ? `<div class="closer-map"><b>📋 Mapeamento do SDR</b><p>${String(l.mapeamento).replace(/</g,'&lt;')}</p></div>` : '';
   return `<div class="stage-row">${pills}</div>
     <div class="closer-fields">
@@ -983,6 +1087,32 @@ function abrirResumoReuniao(id,stage){
   });
 }
 // Pop-up genérico (usado no agendamento do SDR e no resumo do Closer)
+// Fechamento: ao marcar "Fechado", captura produto, valores e o acordo de pagamento de uma vez.
+function abrirFechamento(id){
+  const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
+  const prodOpts=['<option value="">Produto…</option>'].concat(Object.entries(PRODUCTS).map(([k,p])=>`<option value="${k}"${l.produto===k?' selected':''}>${p.label}</option>`)).join('');
+  abrirPrompt({
+    titulo:'Fechar venda 🎉',
+    sub:'Registra os números e o acordo do fechamento. Isso alimenta o dashboard (contrato, cash collect e ticket).',
+    campos:[
+      {key:'produto', type:'select', label:'Produto vendido', options:prodOpts, required:true},
+      {key:'valor_proposto', type:'number', label:'Valor proposto (R$)', value:l.valor_proposto||''},
+      {key:'valor', type:'number', label:'Valor fechado / do contrato (R$)', value:l.valor||l.valor_proposto||'', required:true},
+      {key:'valor_coletado', type:'number', label:'Valor pago agora · entrada (R$)', value:l.valor_coletado||''},
+      {key:'acordo', type:'textarea', label:'Acordo de pagamento', value:l.acordo||'', ph:'Ex: R$ 15k de entrada agora, R$ 49k dia 23/07'},
+    ],
+    onSalvar: async(d)=>{
+      const patch={...closerStagePatch('fechado'),
+        produto: d.produto||null,
+        valor_proposto: Number(d.valor_proposto||0),
+        valor: Number(d.valor||0),
+        valor_coletado: Number(d.valor_coletado||0),
+        acordo: d.acordo||null};
+      const me=curUser(); if(me.role==='closer' && l.closer_id==null) patch.closer_id=me.id;
+      const ok=await saveLead(id,patch); if(ok) refreshLeadViews();
+    }
+  });
+}
 function abrirPrompt({titulo, sub, campos, onSalvar}){
   let ov=document.getElementById('promptModal');
   if(!ov){ ov=document.createElement('div'); ov.id='promptModal'; ov.className='modal-overlay prompt-overlay'; document.body.appendChild(ov); }
@@ -1010,6 +1140,8 @@ async function salvarCloserLead(id){
   const prod=g('produto'); if(prod!==undefined) patch.produto=prod||null;
   const vp=g('valor_proposto'); if(vp!==undefined) patch.valor_proposto=Number(vp||0);
   const vv=g('valor'); if(vv!==undefined) patch.valor=Number(vv||0);
+  const vc=g('valor_coletado'); if(vc!==undefined) patch.valor_coletado=Number(vc||0);
+  const ac=g('acordo'); if(ac!==undefined) patch.acordo=ac;
   const rc=g('resumo_call'); if(rc!==undefined) patch.resumo_call=rc;
   const m=card.querySelector('.sdr-ag-msg'); if(m){m.style.color='var(--ink2)';m.textContent='Salvando...';}
   const ok=await saveLead(id,patch);
@@ -1017,7 +1149,7 @@ async function salvarCloserLead(id){
 }
 function closerLeadCard(l){
   const orig=l.funil||'—'; const dc=(l.agendado_em||'').slice(0,10);
-  return `<div class="sdr-card" data-clead="${l.id}" data-nome="${(l.nome||'').toLowerCase()}">
+  return `<div class="sdr-card" data-clead="${l.id}" data-nome="${buscaHay(l)}">
     <div class="sdr-card-head">
       <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:''}${leadFlagsHtml(l)}</div>
       <span class="muted sm">${orig}${dc?` · ${ICO_CAL} ${fmtDate(dc)}${l.agendado_hora?` ${l.agendado_hora}`:''}`:''}</span>
@@ -1038,7 +1170,7 @@ function renderCloserLancar(){
   else if(CLOSER_FILTRO==='abrir') leads=leads.filter(l=>!['fechado','perdido'].includes(closerEtapa(l)));
   const chip=(k,t)=>`<button type="button" class="sdr-fil ${CLOSER_FILTRO===k?'on':''}" data-cfil="${k}">${t}</button>`;
   const filtros=`<div class="sdr-filtros">${chip('abrir','Em aberto')}${chip('hoje','Calls de hoje')}${chip('todos','Histórico completo')}
-    <input type="search" id="closerBusca" class="lead-busca" placeholder="buscar lead" value="${SDR_Q}">
+    <input type="search" id="closerBusca" class="lead-busca" placeholder="nome, e-mail ou telefone" value="${SDR_Q}">
     <span class="muted sm" id="sdrCount">${leads.length} calls</span></div>`;
   const rows=leads.length?leads.map(l=>closerLeadCard(l)).join(''):'<p class="muted sm" style="padding:12px">Nenhuma call nesse filtro.</p>';
   form.innerHTML=filtros+`<div class="sdr-list">${rows}</div>`;
@@ -1083,7 +1215,7 @@ function renderCloserGeral(){
   const noshow=cnt(inR,l=>l.compareceu_confirmado&&!l.compareceu);
   const followup=cnt(all,l=>closerEtapa(l)==='followup');
   const fechadas=cnt(inR,l=>l.vendeu);
-  const faturamento=inR.filter(l=>l.vendeu).reduce((s,l)=>s+(Number(l.valor)||0),0);
+  const faturamento=inR.filter(l=>l.vendeu).reduce((s,l)=>s+(vVenda(l)),0);
   const txComp=marcadas?100*compareceram/marcadas:NaN, txConv=compareceram?100*fechadas/compareceram:NaN;
   const kc=(l,v,c)=>`<div class="kpi none kpi-${c||'x'}"><div class="k-label">${l}</div><div class="k-val">${v}</div></div>`;
   pane.innerHTML=`
@@ -1124,7 +1256,7 @@ function renderCloserFunil(){
         negoc=cnt(l=>['negociacao','segunda','fechado'].includes(closerEtapa(l))),
         fechadas=cnt(l=>l.vendeu), perdidas=cnt(l=>closerEtapa(l)==='perdido'),
         noshow=cnt(l=>l.compareceu_confirmado&&!l.compareceu), followup=cnt(l=>closerEtapa(l)==='followup');
-  const fat=inR.filter(l=>l.vendeu).reduce((s,l)=>s+(Number(l.valor)||0),0);
+  const fat=inR.filter(l=>l.vendeu).reduce((s,l)=>s+(vVenda(l)),0);
   const kg=$('#kpiTop'); if(kg){ const kc=(l,v,c)=>`<div class="kpi none kpi-${c||'x'}"><div class="k-label">${l}</div><div class="k-val">${v}</div></div>`;
     kg.innerHTML=[['Calls marcadas',intf(marcadas),'b'],['Compareceram',intf(compareceram),'t'],['Fechadas',intf(fechadas),'g'],['Perdidas',intf(perdidas),''],['No-show',intf(noshow),''],['Faturamento',money(fat),'g']].map(([l,v,c])=>kc(l,v,c)).join(''); }
   renderFunnelBars($('#funnel'),[
@@ -1146,8 +1278,8 @@ function renderJornadaCloser(){
   const board=$('#jornadaBoard'); if(!board) return;
   board.classList.remove('jb-sdr'); board.classList.add('jb-closer');
   const me=curUser(); const canMove=me.role==='closer';
-  let leads=closerScopeLeads();
-  if(JQ.trim()){ const q=JQ.trim().toLowerCase(); leads=leads.filter(l=>(l.nome||'').toLowerCase().includes(q)); }
+  let leads=scopeCloser(closerScopeLeads());
+  if(JQ.trim()) leads=leads.filter(l=>buscaMatch(l,JQ));
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=CLOSER_ETAPAS.map(E=>{const n=leads.filter(l=>closerEtapa(l)===E.k).length;
     return `<div class="kpi none" style="border-left-color:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">calls</div></div>`;}).join('');
@@ -1157,7 +1289,7 @@ function renderJornadaCloser(){
     const body=cs.length?cs.map(l=>{
       const dt=l.agendado_em?`<div class="muted sm" style="margin-top:5px">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` ${l.agendado_hora}`:''}</div>`:'';
       const info=(l.produto||l.valor_proposto)?`<div class="muted sm" style="margin-top:4px">${l.produto?produtoLabel(l.produto):''}${l.valor_proposto?`${l.produto?' · ':''}${money(l.valor_proposto)} proposto`:''}</div>`:'';
-      const val=l.vendeu&&l.valor?`<div class="jcard-cash">${money(l.valor)} vendido</div>`:'';
+      const val=l.vendeu&&vVenda(l)?`<div class="jcard-cash">${money(vVenda(l))} vendido${vColeta(l)&&vColeta(l)!==vVenda(l)?` · ${money(vColeta(l))} pago`:''}</div>`:'';
       const fl=leadFlagsHtml(l);
       return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}"><b class="jopen">${l.nome||'(sem nome)'}</b>
         <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.icp?('ICP '+l.icp):''}</span>${waChipHtml(l.telefone)}${isMgr?`<span class="muted">${(getUsers().find(u=>u.id===l.closer_id)||{}).nome||''}</span>`:''}</div>
@@ -1185,7 +1317,7 @@ function renderJornadaCloserPipe(){
   const board=$('#jornadaBoard'); if(!board) return;
   board.classList.remove('jb-sdr'); board.classList.add('jb-closer');
   let cards=myPipeCards();
-  if(JQ.trim()){ const q=JQ.trim().toLowerCase(); cards=cards.filter(c=>(c.lead_nome||'').toLowerCase().includes(q)); }
+  if(JQ.trim()) cards=cards.filter(c=>buscaMatch(c,JQ));
   const etapaDe=c=>ETAPA_MAP[c.etapa]?c.etapa:'1a_call';
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=ETAPAS.map(E=>{const n=cards.filter(c=>etapaDe(c)===E.k).length;
@@ -1459,7 +1591,7 @@ function renderSDRLancar(){
   const chip=(k,t)=>`<button type="button" class="sdr-fil ${SDR_FILTRO===k?'on':''}" data-fil="${k}">${t}</button>`;
   const filtros=`<div class="sdr-filtros">${chip('pendentes','A trabalhar')}${chip('hoje','Chegaram hoje')}${chip('antigos',`Leads Antigos · ${intf(nAntigos)}`)}${chip('todos','Histórico completo')}
     <button type="button" class="btn-mini ok" id="wlAddLead">+ Cadastrar lead</button>
-    <input type="search" id="sdrBusca" class="lead-busca" placeholder="buscar lead pelo nome" value="${SDR_Q}">
+    <input type="search" id="sdrBusca" class="lead-busca" placeholder="nome, e-mail ou telefone" value="${SDR_Q}">
     <span class="muted sm" id="sdrCount">${leads.length} leads</span></div>`;
   const rows = leads.length ? leads.map(l=>sdrLeadCard(l)).join('') : '<p class="muted sm" style="padding:12px">Nenhum lead nesse filtro. 🎉</p>';
   const socialTop = curUser().role==='social_seller' ? socialMetricsFormHTML() : '';
@@ -1477,7 +1609,7 @@ function renderSDRLancar(){
 }
 function filtrarSdrCards(){
   const q=SDR_Q.trim().toLowerCase(); let n=0;
-  $$('.sdr-list .sdr-card').forEach(c=>{ const hit=!q||(c.dataset.nome||'').includes(q); c.style.display=hit?'':'none'; if(hit)n++; });
+  $$('.sdr-list .sdr-card').forEach(c=>{ const hit=hayMatch(c.dataset.nome,q); c.style.display=hit?'':'none'; if(hit)n++; });
   const cnt=$('#sdrCount'); if(cnt) cnt.textContent=`${n} leads`;
 }
 function sdrChecksHTML(l){ return SDR_CHECKS.map(c=>{ const on=chkLigado(l,c.f);
@@ -1498,7 +1630,7 @@ function sdrAgendHTML(l){ return l.agendou ? `<div class="sdr-agend">
 function sdrLeadCard(l){
   const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'—';
   const dc=diaBR(l.data_chegada);
-  return `<div class="sdr-card" data-lead="${l.id}" data-nome="${(l.nome||'').toLowerCase()}">
+  return `<div class="sdr-card" data-lead="${l.id}" data-nome="${buscaHay(l)}">
     <div class="sdr-card-head">
       <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:(l.qualificado?'<span class="badge ok">ICP</span>':'')}${l.antigo?' <span class="badge antigo">antigo</span>':''}${leadFlagsHtml(l)}</div>
       <span class="muted sm">${orig}${dc?` · ${fmtDate(dc)}`:''}</span>
@@ -1653,6 +1785,17 @@ async function salvarAgendamento(id){
   const ok=await saveLead(id,patch);
   if(ok){ if(m){ m.style.color='var(--ok)'; m.textContent='✓ agendamento salvo'; } setTimeout(()=>refreshLeadViews(),700); }
 }
+// Ficha: respostas que o lead deu no formulário (multi-step SE / Forms V5), quando existirem.
+function fichaRespHtml(l){
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const rows=[['Cargo',l.map_perfil],['Empreendimento',l.map_terreno],['O que trava',l.map_travamento],
+    ['Urgência',l.map_quando],['Capital',l.map_capital],['Momento / VGV',l.map_obs]]
+    .filter(r=>String(r[1]||'').trim());
+  if(!rows.length) return '';
+  return `<div class="ml-move"><span class="ml-lbl">Respostas do formulário</span>
+    <div class="ml-grid">${rows.map(r=>`<div class="ml-row"><span>${r[0]}</span><b>${esc(r[1])}</b></div>`).join('')}</div></div>`;
+}
+
 // Modal de detalhe do lead (esteira) — abre ao clicar no nome na Jornada ou na worklist
 function openEsteiraLeadModal(id){
   const l=(ESTEIRA||[]).find(x=>String(x.id)===String(id)); if(!l) return;
@@ -1683,6 +1826,7 @@ function openEsteiraLeadModal(id){
       ${l.agendado_em?`<div class="ml-row"><span>Call marcada</span><b>${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</b></div>`:''}
       ${me.role==='gestor'?`<div class="ml-row"><span>SDR</span><b>${sdrName}</b></div>`:''}
     </div>
+    ${fichaRespHtml(l)}
     ${controls}
   </div>`;
   m.hidden=false;
@@ -1725,10 +1869,10 @@ function renderCalendar(){
     const cell=el('div','cal-cell'+(ds===TODAY?' today':''));
     let dots='',miss=false;
     if(isMgr){
-      for(const u of teamUsers){const has=entries.some(e=>e.userId===u.id);const st=has?'done':(countable?'miss':'pending');if(!has&&countable)miss=true;
+      for(const u of teamUsers){const has=entries.some(e=>e.userId===u.id)||ativoNoDia(u.login,ds);const st=has?'done':(countable?'miss':'pending');if(!has&&countable)miss=true;
         dots+=`<span class="who-chip ${st}" title="${u.nome} (${ROLES[u.role].label}) — ${has?'lançou ✓':(countable?'faltou ✗':'—')}">${initialOf(u.nome)}</span>`;}
     } else {
-      const has=entries.some(e=>e.userId===me.id);const cls=has?'dot-ok':(countable?'dot-bad':'dot-none');miss=!has&&countable;
+      const has=entries.some(e=>e.userId===me.id)||ativoNoDia(me.login,ds);const cls=has?'dot-ok':(countable?'dot-bad':'dot-none');miss=!has&&countable;
       dots=`<span class="dot ${cls}"></span> <small style="font-size:10px;font-weight:700;color:${has?'var(--ok)':(countable?'var(--bad)':'var(--mut)')}">${has?'ok':(countable?'faltou':'')}</small>`;
     }
     if(miss)cell.classList.add('cell-miss');
@@ -1743,8 +1887,8 @@ function showDay(ds){
   const START=TRAFFIC.daily.length?TRAFFIC.daily[0].date:TODAY;
   let fillHtml='';
   if(ds>=START){
-    if(me.role==='gestor'){fillHtml=`<div class="fill-list"><b>Quem lançou:</b> `+(team.length?team.map(u=>{const has=ent.some(e=>e.userId===u.id);return `<span class="fill-pill ${has?'ok':'bad'}">${has?'✓':'✗'} ${u.nome}</span>`;}).join(' '):'<span class="muted">ninguém cadastrado</span>')+`</div>`;}
-    else{const has=ent.some(e=>e.userId===me.id);fillHtml=`<div class="fill-list"><span class="fill-pill ${has?'ok':'bad'}">${has?'✓ Você lançou esse dia':'✗ Você não lançou esse dia'}</span></div>`;}
+    if(me.role==='gestor'){fillHtml=`<div class="fill-list"><b>Quem lançou:</b> `+(team.length?team.map(u=>{const has=ent.some(e=>e.userId===u.id)||ativoNoDia(u.login,ds);return `<span class="fill-pill ${has?'ok':'bad'}">${has?'✓':'✗'} ${u.nome}</span>`;}).join(' '):'<span class="muted">ninguém cadastrado</span>')+`</div>`;}
+    else{const has=ent.some(e=>e.userId===me.id)||ativoNoDia(me.login,ds);fillHtml=`<div class="fill-list"><span class="fill-pill ${has?'ok':'bad'}">${has?'✓ Você lançou esse dia':'✗ Você não lançou esse dia'}</span></div>`;}
   }
   box.innerHTML=`<h2>${fmtDate(ds)} · detalhe do dia</h2>${fillHtml}
    <div class="kpi-grid">

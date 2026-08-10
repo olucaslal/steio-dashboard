@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-<link rel="stylesheet" href="styles.css?v=20260716-r9" />
+<link rel="stylesheet" href="styles.css?v=20260804-cal" />
 <script>document.documentElement.dataset.theme=localStorage.getItem('dc_theme')||'dark';</script>
 </head>
 <body>
@@ -67,6 +67,7 @@
           <button data-p="ontem">Ontem</button>
           <button data-p="7" class="active">7 dias</button>
           <button data-p="14">14 dias</button>
+          <button data-p="30">30 dias</button>
         </div>
         <div class="period-range"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 2.8V7M16 2.8V7"/></svg> <input type="date" id="periodFrom"><span>até</span><input type="date" id="periodTo"></div>
       </div>
@@ -81,6 +82,7 @@
 
     <!-- SUB: GERAL (financeiro) -->
     <section id="sub-geral" class="subpane">
+      <div class="closer-fil" id="closerFiltro"></div>
       <section class="kpi-grid" id="finKpis"></section>
       <div class="two-col">
         <section class="card"><h2>Contratos fechados por dia</h2><div class="chart-box"><canvas id="chartContratos"></canvas></div></section>
@@ -112,6 +114,7 @@
     <section id="sub-jornada" class="subpane" hidden>
       <section class="kpi-grid" id="jornadaKpis"></section>
       <div id="jornadaTools" class="jornada-tools"></div>
+      <div id="jornadaAviso" class="jornada-aviso" hidden></div>
       <div id="jornadaBoard" class="journey-board"></div>
     </section>
   </main>
@@ -166,6 +169,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script src="app.js?v=20260716-r10"></script>
+<script src="app.js?v=20260804-cal"></script>
 </body>
 </html>
