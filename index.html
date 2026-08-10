@@ -8,7 +8,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-<link rel="stylesheet" href="styles.css?v=20260804-cal" />
+<link rel="stylesheet" href="styles.css?v=20260810-r11" />
+<link rel="stylesheet" href="ux-shell.css?v=20260810-r11" />
+<link rel="stylesheet" href="ux-calendario.css?v=20260810-r11" />
+<link rel="stylesheet" href="ux-equipe-metas.css?v=20260810-r11" />
+<link rel="stylesheet" href="ux-jornada.css?v=20260810-r11" />
+<link rel="stylesheet" href="ux-avatar.css?v=20260810-r11" />
+<link rel="stylesheet" href="ux-fixes.css?v=20260810-r11" />
 <script>document.documentElement.dataset.theme=localStorage.getItem('dc_theme')||'dark';</script>
 </head>
 <body>
@@ -59,8 +65,10 @@
 
   <!-- DASHBOARD -->
   <main id="tab-dashboard" class="tabpane">
-    <div class="pane-head">
+    <div class="pane-head hero-head">
+      <div class="ph-title"><span class="pane-kicker">Central Comercial</span>
       <h1>Dashboard</h1>
+      <p class="pane-sub">Acompanhe o desempenho comercial e a evolução do time em tempo real.</p></div>
       <div class="period-wrap">
         <div class="period-sel" id="periodSel">
           <button data-p="hoje">Hoje</button>
@@ -121,7 +129,7 @@
 
   <!-- LANÇAR -->
   <main id="tab-lancar" class="tabpane" hidden>
-    <div class="pane-head"><h1>Lançar dados do dia</h1>
+    <div class="pane-head hero-head"><div class="ph-title"><span class="pane-kicker">Operação diária</span><h1>Lançar dados do dia</h1></div>
       <label class="date-pick">Data <input type="date" id="entryDate" /></label>
     </div>
     <div id="lancarWrap" class="lancar-wrap">
@@ -136,19 +144,21 @@
 
   <!-- CALENDÁRIO -->
   <main id="tab-calendario" class="tabpane" hidden>
-    <div class="pane-head"><h1>Calendário</h1>
+    <div class="pane-head hero-head"><div class="ph-title"><span class="pane-kicker">Agenda do time</span><h1>Calendário</h1></div>
       <div class="cal-nav"><button id="calPrev">‹</button><span id="calLabel" title="Clique pra escolher mês e ano"></span><input type="month" id="calMonthPick" class="cal-month-pick" aria-label="Escolher mês e ano" tabindex="-1"><button id="calNext">›</button></div>
     </div>
-    <section class="card">
-      <div class="cal-legend" id="calLegend"></div>
-      <div id="calGrid" class="cal-grid"></div>
-    </section>
-    <section class="card" id="dayDetail" hidden></section>
+    <div class="cal-layout">
+      <section class="card cal-board">
+        <div class="cal-legend" id="calLegend"></div>
+        <div id="calGrid" class="cal-grid" role="grid"></div>
+      </section>
+      <aside class="card cal-context" id="dayDetail" hidden aria-live="polite"></aside>
+    </div>
   </main>
 
   <!-- EQUIPE & METAS -->
   <main id="tab-equipe" class="tabpane" hidden>
-    <div class="pane-head"><h1>Equipe &amp; Metas</h1></div>
+    <div class="pane-head hero-head"><div class="ph-title"><span class="pane-kicker">Time</span><h1>Equipe &amp; Metas</h1></div></div>
     <div class="two-col">
       <section class="card">
         <h2>Equipe</h2>

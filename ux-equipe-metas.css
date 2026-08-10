@@ -1,0 +1,931 @@
+/* ===== UX-METAS · Equipe & Metas =====
+   Camada carregada depois de styles.css. Mantém o DOM e os tokens do produto. */
+
+/* ---------- Moldura das duas áreas ---------- */
+#tab-equipe .two-col{
+  grid-template-columns:minmax(280px,.86fr) minmax(0,1.7fr);
+  gap:16px;
+  align-items:start;
+}
+
+#tab-equipe .two-col > .card{
+  min-width:0;
+  padding:22px;
+  border-radius:20px;
+  background:var(--card);
+  border-color:var(--line);
+  box-shadow:var(--shadow);
+}
+
+#tab-equipe .two-col > .card > h2{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 16px;
+  color:var(--ink);
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:-.01em;
+}
+
+#tab-equipe .two-col > .card > h2::before{
+  content:"";
+  width:8px;
+  height:8px;
+  flex:none;
+  border-radius:50%;
+  background:var(--mut);
+  box-shadow:0 0 0 4px var(--panel2);
+}
+
+#tab-equipe .two-col > .card:nth-child(2) > h2::before{
+  background:var(--gold-2);
+}
+
+/* ---------- Equipe · roster em cards ---------- */
+#teamTbl{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));
+  gap:12px;
+  width:100%;
+  margin:0;
+  border-collapse:separate;
+}
+
+#teamTbl thead,
+#teamTbl tbody{
+  display:contents;
+}
+
+#teamTbl tr{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+  min-height:148px;
+  padding:20px 13px 16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  text-align:center;
+  transition:transform .22s var(--ease-apple),border-color .22s ease,box-shadow .22s ease;
+}
+
+#teamTbl tr:first-child{
+  display:none;
+}
+
+#teamTbl td{
+  width:auto;
+  max-width:100%;
+  padding:0;
+  border:0;
+  font-size:13px;
+}
+
+#teamTbl td:first-child{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+  color:var(--ink);
+  font-size:14px;
+  font-weight:800;
+  line-height:1.25;
+}
+
+#teamTbl .tm-ava{
+  width:54px;
+  height:54px;
+  margin:0;
+  border:1px solid var(--gold-line);
+  border-radius:50%;
+  background:var(--gold-soft);
+  color:var(--gold-text);
+  font-size:19px;
+  font-weight:800;
+}
+
+#teamTbl td:nth-child(2){
+  color:var(--mut);
+  font-size:11.5px;
+  line-height:1.3;
+}
+
+#teamTbl td:nth-child(3){
+  margin-top:auto;
+  padding-top:7px;
+}
+
+#teamTbl .tag{
+  padding:4px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  font-size:10px;
+  letter-spacing:.02em;
+}
+
+@media(hover:hover){
+  #teamTbl tr:hover{
+    transform:translateY(-2px);
+    border-color:var(--gold-line);
+    box-shadow:var(--shadow);
+  }
+}
+
+/* ---------- Metas · grade de cards por família ---------- */
+#metaTbl{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));
+  gap:16px 12px;
+  width:100%;
+  margin:0;
+  border-collapse:separate;
+}
+
+#metaTbl thead,
+#metaTbl tbody{
+  display:contents;
+}
+
+#metaTbl tr{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:auto 1fr auto;
+  min-width:0;
+  min-height:148px;
+  padding:15px 14px 13px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:16px;
+  text-align:left;
+  transition:transform .22s var(--ease-apple),border-color .22s ease,box-shadow .22s ease;
+}
+
+#metaTbl tr:first-child{
+  display:none;
+}
+
+#metaTbl td{
+  min-width:0;
+  padding:0;
+  border:0;
+}
+
+#metaTbl td:first-child{
+  grid-column:1;
+  grid-row:1;
+  align-self:start;
+  color:var(--ink);
+  font-size:12px;
+  font-weight:800;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+}
+
+#metaTbl td:nth-child(2){
+  grid-column:2;
+  grid-row:1;
+  align-self:start;
+  justify-self:end;
+  padding-left:8px;
+}
+
+#metaTbl td:last-child{
+  grid-column:1/-1;
+  grid-row:3;
+  align-self:end;
+  display:flex;
+  align-items:flex-end;
+  min-height:56px;
+  padding-top:12px;
+}
+
+#metaTbl .dir-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:3px 8px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:var(--panel2);
+  color:var(--mut);
+  font-size:10px;
+  font-weight:700;
+  line-height:1.2;
+  white-space:nowrap;
+}
+
+#metaTbl .dir-pill.up{
+  background:var(--panel2);
+  color:var(--ok-text);
+}
+
+#metaTbl .dir-pill.down{
+  background:var(--panel2);
+  color:var(--blue-text);
+}
+
+#metaTbl td:last-child > b{
+  display:block;
+  color:var(--ink);
+  font-size:25px;
+  font-weight:800;
+  letter-spacing:-.03em;
+  line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+
+#metaTbl .meta-field{
+  display:flex;
+  align-items:center;
+  width:100%;
+  min-height:52px;
+  padding:4px 9px 4px 5px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel2);
+  transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease;
+}
+
+#metaTbl .meta-field:focus-within{
+  border-color:var(--gold);
+  background:var(--card);
+  box-shadow:var(--focus);
+}
+
+#metaTbl .meta-field input{
+  flex:1 1 auto;
+  width:1px;
+  min-width:0;
+  padding:4px 6px;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--ink);
+  caret-color:var(--gold);
+  font-size:25px;
+  font-weight:800;
+  letter-spacing:-.03em;
+  line-height:1.1;
+  text-align:left;
+  font-variant-numeric:tabular-nums;
+}
+
+#metaTbl .meta-field input:focus-visible{
+  outline:0;
+  box-shadow:none;
+}
+
+#metaTbl .meta-field em{
+  flex:none;
+  padding-left:5px;
+  color:var(--mut);
+  font-size:10px;
+  font-style:normal;
+  font-weight:700;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+/* A ordem atual de DEFAULT_METAS cria as famílias sem alterar o markup. */
+#metaTbl tr:nth-child(3),
+#metaTbl tr:nth-child(4),
+#metaTbl tr:nth-child(5),
+#metaTbl tr:nth-child(6),
+#metaTbl tr:nth-child(7){order:1}
+#metaTbl tr:nth-child(8),
+#metaTbl tr:nth-child(9){order:2}
+#metaTbl tr:nth-child(10),
+#metaTbl tr:nth-child(11){order:3}
+#metaTbl tr:nth-child(12),
+#metaTbl tr:nth-child(13){order:4}
+#metaTbl tr:nth-child(2){order:5}
+
+#metaTbl tr:nth-child(3),
+#metaTbl tr:nth-child(8),
+#metaTbl tr:nth-child(10),
+#metaTbl tr:nth-child(12),
+#metaTbl tr:nth-child(2){
+  grid-column:1;
+  margin-top:0;
+  padding-top:32px;
+}
+
+#metaTbl tr:nth-child(3)::before,
+#metaTbl tr:nth-child(8)::before,
+#metaTbl tr:nth-child(10)::before,
+#metaTbl tr:nth-child(12)::before,
+#metaTbl tr:nth-child(2)::before{
+  position:absolute;
+  top:12px;
+  left:14px;
+  color:var(--mut);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.12em;
+  line-height:1;
+  text-transform:uppercase;
+  pointer-events:none;
+}
+
+#metaTbl tr:nth-child(3)::before{content:"Custo / CPL"}
+#metaTbl tr:nth-child(8)::before{content:"Taxas de SDR"}
+#metaTbl tr:nth-child(10)::before{content:"Taxas de Social"}
+#metaTbl tr:nth-child(12)::before{content:"Taxas de Closer"}
+#metaTbl tr:nth-child(2)::before{content:"Qualidade / ICP"}
+
+@media(hover:hover){
+  #metaTbl tr:hover{
+    transform:translateY(-2px);
+    border-color:var(--gold-line);
+    box-shadow:var(--shadow);
+  }
+}
+
+#metaHint{
+  display:flex;
+  gap:8px;
+  align-items:flex-start;
+  margin:16px 0 0!important;
+  padding:10px 11px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--panel);
+  color:var(--mut);
+  font-size:11px;
+  line-height:1.4;
+}
+
+#metaHint::before{
+  content:"i";
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:16px;
+  height:16px;
+  flex:none;
+  border:1px solid var(--line);
+  border-radius:50%;
+  color:var(--gold-text);
+  font-size:10px;
+  font-weight:800;
+}
+
+/* ---------- Lançar dados · formulário e estados ---------- */
+#tab-lancar .lancar-wrap{
+  gap:16px;
+}
+
+#tab-lancar .lancar-wrap.two{
+  grid-template-columns:minmax(320px,.9fr) minmax(0,1.1fr);
+}
+
+#tab-lancar .card.narrow{
+  width:100%;
+  max-width:680px;
+  padding:24px;
+  border-radius:20px;
+  background:var(--card);
+  border-color:var(--line);
+  box-shadow:var(--shadow);
+}
+
+#tab-lancar .entry-role{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  width:100%;
+  margin:0 0 20px;
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:var(--panel);
+  color:var(--ink2);
+  font-size:13px;
+  line-height:1.35;
+}
+
+#tab-lancar .entry-role::before{
+  content:"Perfil ativo";
+  flex:none;
+  color:var(--mut);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+
+#tab-lancar .entry-role b{
+  min-width:0;
+  color:var(--ink);
+  overflow-wrap:anywhere;
+}
+
+#tab-lancar .entry-form:not(.sdr-form){
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px 14px;
+  align-items:start;
+}
+
+#tab-lancar .entry-form:not(.sdr-form) > label,
+#tab-lancar .entry-form:not(.sdr-form) > .full{
+  min-width:0;
+}
+
+#tab-lancar .entry-form label,
+#tab-lancar .sm-grid label,
+#tab-lancar .closer-fields label{
+  color:var(--ink2);
+  font-size:11px;
+  font-weight:800;
+  line-height:1.35;
+}
+
+#tab-lancar .entry-form input,
+#tab-lancar .entry-form select,
+#tab-lancar .entry-form textarea,
+#tab-lancar .sm-grid input,
+#tab-lancar .closer-fields input,
+#tab-lancar .closer-fields select,
+#tab-lancar .closer-fields textarea{
+  width:100%;
+  min-height:44px;
+  margin-top:1px;
+  padding:10px 11px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--panel2);
+  color:var(--ink);
+  font:inherit;
+  font-size:14px;
+  font-weight:600;
+  line-height:1.3;
+  transition:border-color .2s ease,box-shadow .2s ease,background-color .2s ease;
+}
+
+#tab-lancar .entry-form textarea,
+#tab-lancar .closer-fields textarea{
+  min-height:96px;
+  resize:vertical;
+}
+
+#tab-lancar .entry-form input::placeholder,
+#tab-lancar .entry-form textarea::placeholder,
+#tab-lancar .closer-fields input::placeholder,
+#tab-lancar .closer-fields textarea::placeholder{
+  color:var(--mut);
+  opacity:1;
+}
+
+#tab-lancar .entry-form input:hover,
+#tab-lancar .entry-form select:hover,
+#tab-lancar .entry-form textarea:hover,
+#tab-lancar .sm-grid input:hover,
+#tab-lancar .closer-fields input:hover,
+#tab-lancar .closer-fields select:hover,
+#tab-lancar .closer-fields textarea:hover{
+  border-color:var(--gold-line);
+}
+
+#tab-lancar .entry-form input:focus-visible,
+#tab-lancar .entry-form select:focus-visible,
+#tab-lancar .entry-form textarea:focus-visible,
+#tab-lancar .sm-grid input:focus-visible,
+#tab-lancar .closer-fields input:focus-visible,
+#tab-lancar .closer-fields select:focus-visible,
+#tab-lancar .closer-fields textarea:focus-visible{
+  outline:2px solid var(--gold);
+  outline-offset:2px;
+  border-color:var(--gold);
+  background:var(--card);
+  box-shadow:var(--focus);
+}
+
+#tab-lancar .entry-form input[aria-invalid="true"],
+#tab-lancar .entry-form select[aria-invalid="true"],
+#tab-lancar .entry-form textarea[aria-invalid="true"],
+#tab-lancar .entry-form input:user-invalid,
+#tab-lancar .entry-form select:user-invalid,
+#tab-lancar .entry-form textarea:user-invalid{
+  border-color:var(--bad);
+  box-shadow:0 0 0 3px var(--bad-bg);
+}
+
+#tab-lancar .field-hint{
+  display:block;
+  margin-top:5px;
+  color:var(--mut);
+  font-size:10.5px;
+  font-weight:500;
+  line-height:1.4;
+}
+
+#tab-lancar .entry-form .btn-primary,
+#tab-lancar .social-metrics .btn-primary{
+  min-height:46px;
+  padding:11px 16px;
+  border-radius:12px;
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:.01em;
+}
+
+#tab-lancar .entry-form:not(.sdr-form) .btn-primary{
+  width:100%;
+  margin-top:2px;
+}
+
+#tab-lancar .entry-msg{
+  min-height:20px;
+  margin:12px 0 0;
+  padding:0;
+  color:var(--ink2);
+  font-size:12px;
+  line-height:1.4;
+}
+
+#tab-lancar .entry-msg,
+#tab-lancar .sm-msg,
+#tab-lancar .sdr-ag-msg,
+#metaHint{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+#tab-lancar .entry-msg:not(:empty){
+  padding:9px 11px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--panel);
+}
+
+/* Bloco automático e métricas de Social Seller */
+#tab-lancar .auto-box,
+#tab-lancar .social-metrics{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--gold-2);
+  border-radius:15px;
+  box-shadow:none;
+}
+
+#tab-lancar .auto-box{
+  gap:18px;
+  padding:15px 16px;
+}
+
+#tab-lancar .auto-item span{
+  color:var(--mut);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+
+#tab-lancar .auto-item b{
+  color:var(--gold-text);
+  font-size:25px;
+}
+
+#tab-lancar .auto-tag{
+  color:var(--gold-text);
+}
+
+#tab-lancar .social-metrics{
+  margin-bottom:18px;
+  padding:16px;
+}
+
+#tab-lancar .sm-head{
+  margin-bottom:14px;
+  color:var(--ink);
+  font-size:13px;
+  font-weight:800;
+}
+
+#tab-lancar .sm-grid{
+  gap:14px;
+  margin-bottom:14px;
+}
+
+/* Worklist real do SDR/Closer, que substitui o formulário simples em runtime. */
+#tab-lancar .entry-form.sdr-form{
+  display:block;
+}
+
+#tab-lancar .sdr-filtros{
+  align-items:center;
+  gap:7px;
+  row-gap:8px;
+  margin-bottom:16px;
+  padding:7px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:var(--panel);
+}
+
+#tab-lancar .sdr-fil{
+  min-height:40px;
+  padding:7px 12px;
+  border-radius:999px;
+  background:var(--card);
+  border-color:var(--line);
+  color:var(--ink2);
+  font-size:11px;
+}
+
+#tab-lancar .sdr-fil.on{
+  background:var(--gold-2);
+  border-color:var(--gold-2);
+  color:var(--gold-ink);
+}
+
+#tab-lancar .sdr-list{
+  gap:12px;
+  margin-top:0;
+}
+
+#tab-lancar .sdr-card{
+  min-width:0;
+  padding:16px;
+  border-radius:16px;
+  background:var(--panel);
+  border-color:var(--line);
+  box-shadow:none;
+}
+
+#tab-lancar .sdr-card-head > *{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+#tab-lancar .sdr-card-head .sdr-open{
+  overflow-wrap:anywhere;
+}
+
+#tab-lancar .sdr-agend-row > label{
+  flex:1 1 160px;
+  min-width:0;
+}
+
+#tab-lancar .closer-fields{
+  gap:12px;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+}
+
+#tab-lancar .closer-fields .btn-primary{
+  align-self:flex-start;
+  width:auto;
+  min-width:120px;
+}
+
+/* ---------- Meus deals · painel escaneável do closer ---------- */
+#tab-lancar #closerDeals{
+  min-width:0;
+  padding:24px;
+  border-radius:20px;
+  background:var(--card);
+  border-color:var(--line);
+  box-shadow:var(--shadow);
+}
+
+#tab-lancar #closerDeals > h2{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:0 0 14px;
+  color:var(--ink);
+  font-size:15px;
+  font-weight:800;
+}
+
+#tab-lancar #closerDeals > h2::before{
+  content:"";
+  width:8px;
+  height:8px;
+  flex:none;
+  border-radius:50%;
+  background:var(--gold-2);
+  box-shadow:0 0 0 4px var(--gold-soft);
+}
+
+#tab-lancar #closerDeals .sdr-filtros{
+  margin-top:0!important;
+  margin-bottom:14px;
+  padding:7px;
+}
+
+#tab-lancar #closerDeals .btn-mini.ok{
+  min-height:40px;
+  padding:7px 12px;
+  border-color:var(--gold-line);
+  background:var(--gold-soft);
+  color:var(--gold-text);
+}
+
+#tab-lancar #closerDeals .pipe-list{
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+  margin-top:0;
+}
+
+#tab-lancar #closerDeals .pipe-card{
+  min-width:0;
+  padding:16px;
+  border:1px solid var(--line);
+  border-left:3px solid var(--blue);
+  border-radius:16px;
+  background:var(--panel);
+  box-shadow:none;
+}
+
+#tab-lancar #closerDeals .pipe-card.st-fechado{
+  border-left-color:var(--ok);
+}
+
+#tab-lancar #closerDeals .pipe-card.st-perdido{
+  border-left-color:var(--bad);
+}
+
+#tab-lancar #closerDeals .pipe-top{
+  align-items:flex-start;
+  font-size:14px;
+  line-height:1.3;
+}
+
+#tab-lancar #closerDeals .pipe-top b{
+  color:var(--ink);
+  font-size:14px;
+  font-weight:800;
+}
+
+#tab-lancar #closerDeals .pipe-prod{
+  min-height:28px;
+  flex-wrap:wrap;
+  row-gap:6px;
+  margin:10px 0;
+}
+
+#tab-lancar #closerDeals .pipe-mid{
+  margin:0;
+  padding-top:10px;
+  border-top:1px solid var(--line);
+  color:var(--mut);
+  font-size:11px;
+  line-height:1.45;
+}
+
+#tab-lancar #closerDeals .pipe-mid + .pipe-mid{
+  margin-top:8px;
+}
+
+#tab-lancar #closerDeals .pipe-mid b{
+  color:var(--ink);
+  font-size:15px;
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+}
+
+#tab-lancar #closerDeals .pipe-mid .cash{
+  color:var(--ok-text);
+}
+
+/* ---------- Preview estático ---------- */
+.preview-page .preview-pane{
+  display:block!important;
+}
+
+.preview-page .preview-pane + .preview-pane{
+  padding-top:0;
+}
+
+.preview-page .preview-pane .pane-head{
+  padding-right:0;
+}
+
+.preview-page .preview-pane .pane-head h1{
+  font-size:24px;
+}
+
+/* ---------- Temas ---------- */
+[data-theme="light"] #tab-equipe .two-col > .card,
+[data-theme="light"] #tab-lancar .card,
+[data-theme="light"] #tab-lancar #closerDeals{
+  background:var(--card);
+  border-color:var(--line);
+  box-shadow:var(--shadow);
+}
+
+[data-theme="light"] #teamTbl tr,
+[data-theme="light"] #metaTbl tr,
+[data-theme="light"] #metaHint,
+[data-theme="light"] #tab-lancar .entry-role,
+[data-theme="light"] #tab-lancar .entry-msg:not(:empty),
+[data-theme="light"] #tab-lancar .auto-box,
+[data-theme="light"] #tab-lancar .social-metrics,
+[data-theme="light"] #tab-lancar .sdr-filtros,
+[data-theme="light"] #tab-lancar .sdr-card,
+[data-theme="light"] #tab-lancar #closerDeals .pipe-card{
+  background:var(--panel);
+  border-color:var(--line);
+}
+
+[data-theme="light"] #metaTbl .meta-field:focus-within,
+[data-theme="light"] #tab-lancar .entry-form input:focus-visible,
+[data-theme="light"] #tab-lancar .entry-form select:focus-visible,
+[data-theme="light"] #tab-lancar .entry-form textarea:focus-visible,
+[data-theme="light"] #tab-lancar .sm-grid input:focus-visible,
+[data-theme="light"] #tab-lancar .closer-fields input:focus-visible,
+[data-theme="light"] #tab-lancar .closer-fields select:focus-visible,
+[data-theme="light"] #tab-lancar .closer-fields textarea:focus-visible{
+  background:var(--card);
+}
+
+/* ---------- Responsivo ---------- */
+@media(max-width:1100px){
+  #tab-equipe .two-col{
+    grid-template-columns:1fr;
+  }
+
+  #tab-equipe .two-col > .card{
+    padding:20px;
+  }
+}
+
+@media(max-width:980px){
+  #tab-lancar .lancar-wrap.two{
+    grid-template-columns:1fr;
+  }
+
+  #tab-lancar .card.narrow{
+    max-width:none;
+  }
+}
+
+@media(max-width:760px){
+  #metaTbl{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  #tab-lancar .entry-form:not(.sdr-form){
+    grid-template-columns:1fr;
+  }
+
+  #tab-lancar .entry-form:not(.sdr-form) .full{
+    grid-column:auto;
+  }
+}
+
+@media(max-width:600px){
+  #tab-equipe .two-col > .card,
+  #tab-lancar .card.narrow,
+  #tab-lancar #closerDeals{
+    padding:17px;
+    border-radius:17px;
+  }
+
+  #teamTbl{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  #metaTbl{
+    grid-template-columns:1fr;
+  }
+
+  #metaTbl tr{
+    min-height:136px;
+  }
+
+  #tab-lancar .entry-role{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:4px;
+  }
+
+  #tab-lancar #closerDeals .pipe-list{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(max-width:390px){
+  #teamTbl{
+    grid-template-columns:1fr;
+  }
+
+  #teamTbl tr{
+    min-height:132px;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  #teamTbl tr,
+  #metaTbl tr{
+    transition:none;
+  }
+}
