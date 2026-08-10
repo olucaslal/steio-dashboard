@@ -1,0 +1,113 @@
+/* ===== AVATAR — padrão iOS (carregado por ÚLTIMO: sobrescreve qualquer .avt anterior) =====
+   Regra: círculo perfeito, fill sólido da cor da pessoa, inicial BRANCA.
+   Proibido: borda colorida + fundo escurecido da mesma cor + letra na cor da borda. */
+
+.avt,
+#tab-calendario .avt,
+#teamTbl .avt.tm-ava{
+  --avt-c:#0a84ff;
+  --avt-ring:var(--card);
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  border:0;
+  padding:0;
+  overflow:hidden;
+  font-weight:600;
+  font-size:12px;
+  line-height:1;
+  letter-spacing:.01em;
+  font-variant-numeric:tabular-nums;
+  color:#fff;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb,var(--avt-c) 82%,#ffffff) 0%,
+      var(--avt-c) 58%,
+      color-mix(in srgb,var(--avt-c) 88%,#000000) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -6px 10px -6px rgba(0,0,0,.35),
+    0 1px 2px rgba(2,6,13,.4);
+  transition:transform .2s var(--ease-apple),box-shadow .2s var(--ease-apple);
+}
+.avt>span,#tab-calendario .avt>span{display:block;transform:translateY(.02em)}
+.avt>img,#tab-calendario .avt>img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}
+
+/* tamanhos — a inicial acompanha o diâmetro */
+.avt.avt-xs,#tab-calendario .avt.avt-xs{width:22px;height:22px;font-size:9px}
+.avt.avt-sm,#tab-calendario .avt.avt-sm{width:28px;height:28px;font-size:11px}
+.avt.avt-md,#tab-calendario .avt.avt-md{width:36px;height:36px;font-size:13px}
+.avt.avt-lg,#tab-calendario .avt.avt-lg{width:56px;height:56px;font-size:19px;font-weight:600}
+#teamTbl .avt.tm-ava{width:56px;height:56px;font-size:19px;margin:0}
+
+/* paleta — matizes do sistema iOS, cor cheia (nunca escurecida atrás da letra) */
+.avt.avt-tone-0,#tab-calendario .avt.avt-tone-0{--avt-c:#0a84ff}
+.avt.avt-tone-1,#tab-calendario .avt.avt-tone-1{--avt-c:#30d158}
+.avt.avt-tone-2,#tab-calendario .avt.avt-tone-2{--avt-c:#bf5af2}
+.avt.avt-tone-3,#tab-calendario .avt.avt-tone-3{--avt-c:#ff9f0a}
+.avt.avt-tone-4,#tab-calendario .avt.avt-tone-4{--avt-c:#ff375f}
+.avt.avt-tone-5,#tab-calendario .avt.avt-tone-5{--avt-c:#5e9ded}
+/* variantes antigas do calendário mapeadas pra mesma paleta */
+#tab-calendario .avt.avt-blue{--avt-c:#0a84ff}
+#tab-calendario .avt.avt-green{--avt-c:#30d158}
+#tab-calendario .avt.avt-warn{--avt-c:#ff9f0a}
+#tab-calendario .avt.avt-red{--avt-c:#ff375f}
+#tab-calendario .avt.avt-neutral{--avt-c:#7d8aa0}
+
+/* pilha de avatares — anel na cor do fundo, não na cor da pessoa */
+.dots,#tab-calendario .cal-cell .dots{display:inline-flex;align-items:center}
+.dots .avt,#tab-calendario .cal-cell .dots .avt{
+  box-shadow:
+    0 0 0 2px var(--avt-ring),
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -6px 10px -6px rgba(0,0,0,.35),
+    0 1px 2px rgba(2,6,13,.4);
+}
+.dots .avt + .avt,#tab-calendario .cal-cell .dots .avt + .avt{margin-left:-8px}
+.dots .avt:hover,#tab-calendario .cal-cell .dots .avt:hover{transform:translateY(-1px);z-index:2}
+
+/* estado do lançamento no rodapé do dia: cor cheia = feito, cinza = pendente, vermelho = no-show */
+#tab-calendario .dots .avt.fill-done{border:0}
+#tab-calendario .dots .avt.fill-miss{--avt-c:#ff375f;border:0}
+#tab-calendario .dots .avt.fill-pending{
+  border:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,.05) 100%);
+  color:var(--mut);
+  box-shadow:0 0 0 2px var(--avt-ring),inset 0 0 0 1px var(--line);
+  opacity:1;
+}
+
+/* célula do calendário e cards definem o anel com a própria cor de fundo */
+#tab-calendario .cal-cell{--avt-ring:var(--panel)}
+#tab-calendario .cal-cell.is-today{--avt-ring:var(--card)}
+.jcard,.lead-modal-head,.tbl tr{--avt-ring:var(--card)}
+
+/* tema claro: mesma construção, anel branco; a inicial segue branca sobre cor saturada */
+[data-theme="light"] .avt,
+[data-theme="light"] #tab-calendario .avt,
+[data-theme="light"] #teamTbl .avt.tm-ava{
+  color:#fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.4),
+    inset 0 -6px 10px -6px rgba(0,0,0,.22),
+    0 1px 2px rgba(24,32,48,.18);
+}
+[data-theme="light"] .avt.avt-tone-0{--avt-c:#007aff}
+[data-theme="light"] .avt.avt-tone-1{--avt-c:#28b34c}
+[data-theme="light"] .avt.avt-tone-2{--avt-c:#a542db}
+[data-theme="light"] .avt.avt-tone-3{--avt-c:#f08c00}
+[data-theme="light"] .avt.avt-tone-4{--avt-c:#f2274c}
+[data-theme="light"] .avt.avt-tone-5{--avt-c:#3d7fd6}
+[data-theme="light"] #tab-calendario .dots .avt.fill-pending{
+  background:linear-gradient(180deg,rgba(32,36,44,.07) 0%,rgba(32,36,44,.04) 100%);
+  color:var(--mut);
+}
+
+@media(prefers-reduced-motion:reduce){
+  .avt,#tab-calendario .avt{transition:none}
+}

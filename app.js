@@ -130,17 +130,58 @@ function waHref(tel){
   if((d.length===12||d.length===13)&&d.startsWith('55')) return 'https://wa.me/'+d;
   return null;
 }
+function formatTel(tel){
+  let d=String(tel||'').replace(/\D/g,'');
+  if((d.length===12||d.length===13)&&d.startsWith('55')) d=d.slice(2);
+  if(d.length===11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  if(d.length===10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return String(tel||'');
+}
 // Número visível vira link (mantém o texto, só linka). stopPropagation pra não abrir o modal do card.
 function waTelHtml(tel){
   if(!tel) return '';
   const href=waHref(tel);
-  if(!href) return `<span>${tel}</span>`;
-  return `<a class="wa-link" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ICO_WA}${tel}</a>`;
+  if(!href) return `<span>${escHtml(tel)}</span>`;
+  return `<a class="wa-link" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ICO_WA}${escHtml(formatTel(tel))}</a>`;
 }
 // Chip discreto pra cards compactos que não exibem o número
 function waChipHtml(tel){
   const href=waHref(tel); if(!href) return '';
   return `<a class="wa-chip" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Chamar no WhatsApp · ${tel}">${ICO_WA}</a>`;
+}
+const escHtml=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function initialsOf(name){
+  const parts=String(name||'?').replace(/\([^)]*\)/g,'').trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0]||'?')+(parts.length>1?(parts.at(-1)?.[0]||''):'')).toUpperCase();
+}
+function avatarTone(name){let hash=0;for(const ch of String(name||''))hash=(hash*31+ch.charCodeAt(0))|0;return Math.abs(hash)%6;}
+function avatarHtml(name,photo='',extra='',decorative=false,title=name){
+  const safeName=escHtml(name||'Pessoa'),safeTitle=escHtml(title||name||'Pessoa');
+  const tone=avatarTone(name);
+  const media=photo?`<img src="${escHtml(photo)}" alt="" loading="lazy">`:`<span aria-hidden="true">${initialsOf(name)}</span>`;
+  return `<span class="avt avt-tone-${tone}${extra?` ${extra}`:''}" title="${safeTitle}" ${decorative?'aria-hidden="true"':`aria-label="${safeName}"`}>${media}</span>`;
+}
+function calendarAvatarHtml(name,photo='',size='avt-xs',extra='',title=name){
+  const variants=['','avt-blue','avt-green','avt-warn','avt-red','avt-neutral'];
+  return avatarHtml(name,photo,`${size} ${variants[avatarTone(name)]}${extra?` ${extra}`:''}`,true,title);
+}
+function wireJourneyCards(board,selector,open){
+  board.querySelectorAll(selector).forEach(card=>{
+    const name=card.querySelector('.jopen')?.textContent?.trim()||'lead';
+    let draggedAt=0;
+    if(card.draggable) card.setAttribute('aria-grabbed','false');
+    card.addEventListener('dragstart',()=>{draggedAt=Date.now();card.setAttribute('aria-grabbed','true');});
+    card.addEventListener('dragend',()=>{draggedAt=Date.now();card.setAttribute('aria-grabbed','false');});
+    card.tabIndex=0; card.setAttribute('role','button'); card.setAttribute('aria-label',`Abrir ${name}`);
+    const activate=e=>{
+      if(Date.now()-draggedAt<350) return;
+      if(e.target.closest('a,button,input,select,textarea,label')) return;
+      if(e.type==='keydown'&&!['Enter',' '].includes(e.key)) return;
+      if(e.type==='keydown') e.preventDefault();
+      open(card);
+    };
+    card.onclick=activate; card.onkeydown=activate;
+  });
 }
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 const money=n=>!isFinite(n)||n==null?'—':'R$ '+Math.round(n).toLocaleString('pt-BR');
@@ -493,11 +534,14 @@ async function renderFunil(){
     catch(e){ if(temAntigo){ d=_dcCache.data; } else { if(kg) kg.innerHTML='<div class="muted sm" style="padding:10px">Não consegui carregar os funis agora.</div>'; return; } }
   }
   // seletor de funil
+  const maxLeads=Math.max(1,...FUNIS_VENDA.map(nome=>Number((d.funis||[]).find(x=>x.nome===nome)?.leads)||0));
   pick.innerHTML=FUNIS_VENDA.map(nome=>{
     const f=(d.funis||[]).find(x=>x.nome===nome)||{};
-    return `<button class="fpick ${nome===SELFUNIL?'on':''}" data-funil="${nome}">
+    const selected=nome===SELFUNIL, share=Math.round(100*(Number(f.leads)||0)/maxLeads);
+    return `<button type="button" class="fpick ${selected?'on is-active':''}" data-funil="${nome}" aria-pressed="${selected}">
       <span class="fp-name">${FUNIL_APELIDO[nome]}</span>
-      <span class="fp-sub">${intf(f.leads||0)} leads · ${money(f.spend)}</span></button>`;
+      <span class="fp-stats"><strong>${intf(f.leads||0)}</strong><small>leads</small><b>${money(f.spend)}</b></span>
+      <span class="fp-meter" aria-hidden="true"><i style="width:${share}%"></i></span></button>`;
   }).join('');
   pick.querySelectorAll('.fpick').forEach(b=>b.onclick=()=>{ SELFUNIL=b.dataset.funil; renderFunilSelecionado(d); });
   renderFunilSelecionado(d);
@@ -505,7 +549,7 @@ async function renderFunil(){
 
 function renderFunilSelecionado(d){
   const f=(d.funis||[]).find(x=>x.nome===SELFUNIL)||{};
-  $('#funnelPicker')?.querySelectorAll('.fpick').forEach(b=>b.classList.toggle('on',b.dataset.funil===SELFUNIL));
+  $('#funnelPicker')?.querySelectorAll('.fpick').forEach(b=>{const on=b.dataset.funil===SELFUNIL;b.classList.toggle('on',on);b.classList.toggle('is-active',on);b.setAttribute('aria-pressed',String(on));});
 
   // KPIs do funil (parecido com o tráfego)
   const kg=$('#kpiTop');
@@ -707,8 +751,8 @@ function renderJornada(){
     const hint = JVIEW==='sdr'
       ? `<span class="muted sm">Leads que chegaram no período: se já foram contactados, responderam e agendaram.</span>`
       : (me.role==='closer'
-        ? `<span class="muted sm">Seus negócios: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`
-        : `<span class="muted sm">Suas calls: arraste o card pra mudar de etapa ou clique no nome pra abrir.</span>`);
+        ? `<span class="muted sm">Seus negócios: arraste o card pra mudar de etapa ou clique no card pra abrir.</span>`
+        : `<span class="muted sm">Suas calls: arraste o card pra mudar de etapa ou clique no card pra abrir.</span>`);
     const search = (me.role==='gestor'||me.role==='sdr'||me.role==='social_seller'||me.role==='closer')
       ? `<input type="search" id="jBusca" class="lead-busca" placeholder="buscar lead" value="${JQ}">` : '';
     const addBtn = me.role==='closer'
@@ -740,7 +784,7 @@ function renderJornadaSDR(){
   });
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=SDR_ETAPAS.map(E=>{const n=leads.filter(l=>sdrEtapa(l)===E.k).length;
-    return `<div class="kpi none" style="border-left-color:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">leads</div></div>`;}).join('');
+    return `<div class="kpi none" style="--sc:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">leads</div></div>`;}).join('');
   const isMgr=me.role==='gestor';
   const canMove=isFieldRole(me.role);   // o próprio SDR/Social move seus leads
   board.classList.remove('jb-sdr','jb-closer');
@@ -749,7 +793,7 @@ function renderJornadaSDR(){
     const dc=diaBR(l.data_chegada);
     const nm=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
     return `<div class="jcard jcard-antigo" data-lid="${l.id}" data-nome="${(l.nome||'').toLowerCase()}" draggable="${canMove}">
-      <b class="jopen">${l.nome||'(sem nome)'}</b>
+      <div class="jcard-person">${avatarHtml(l.nome,l.foto_url||l.avatar_url,'avt-sm')}<b class="jopen">${l.nome||'(sem nome)'}</b></div>
       <div class="jcard-foot"><span class="badge antigo">antigo</span>${waChipHtml(l.telefone)}${nm?`<span class="muted">${nm}</span>`:''}</div>
       <div class="muted sm" style="margin-top:5px">${orig}${dc?` · ${fmtDate(dc)}`:''}</div>
     </div>`;
@@ -768,14 +812,14 @@ function renderJornadaSDR(){
       const extra = l.agendou&&l.agendado_em ? `<div class="jcard-cash" style="color:var(--purple)">${ICO_CAL} ${fmtDate(l.agendado_em)}${l.agendado_hora?` ${l.agendado_hora}`:''}</div>` : '';
       const fl=leadFlagsHtml(l);
       return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}">
-        <b class="jopen">${l.nome||'(sem nome)'}</b>
+        <div class="jcard-person">${avatarHtml(l.nome,l.foto_url||l.avatar_url,'avt-sm')}<b class="jopen">${l.nome||'(sem nome)'}</b></div>
         <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.qualificado?'ICP '+(l.icp||'✓'):'a qualificar'}</span>${waChipHtml(l.telefone)}${sdrName?`<span class="muted">${sdrName}</span>`:''}</div>
         ${fl?`<div class="jflags">${fl}</div>`:''}
         <div class="muted sm" style="margin-top:5px">${orig}</div>${extra}
       </div>`;}).join(''):'<p class="muted sm">sem leads</p>';
     return `<div class="jcol" data-sstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
   }).join('');
-  board.querySelectorAll('.jcard[data-lid] .jopen').forEach(nm=>nm.onclick=e=>{ e.stopPropagation(); openEsteiraLeadModal(nm.closest('.jcard').dataset.lid); });
+  wireJourneyCards(board,'.jcard[data-lid]',card=>openEsteiraLeadModal(card.dataset.lid));
   if(canMove){
     board.querySelectorAll('.jcard[data-lid]').forEach(card=>{
       card.ondragstart=e=>{_dragId=card.dataset.lid;e.dataTransfer.effectAllowed='move';};
@@ -933,13 +977,13 @@ async function moverLeadCloser(id,stage){
 }
 function closerControlsInner(l){
   const cur=closerEtapa(l);
-  const pills=CLOSER_ETAPAS.map(E=>`<button type="button" class="stage-pill${cur===E.k?' on':''}" data-cmv="${E.k}" style="--sc:${E.color}">${E.label}</button>`).join('');
+  const pills=CLOSER_ETAPAS.map(E=>`<button type="button" class="stage-pill${cur===E.k?' on':''}" data-cmv="${E.k}" style="--sc:${E.color}" aria-pressed="${cur===E.k}">${E.label}</button>`).join('');
   const prodOpts=['<option value="">Produto…</option>'].concat(Object.entries(PRODUCTS).map(([k,p])=>`<option value="${k}"${l.produto===k?' selected':''}>${p.label}</option>`)).join('');
   const meetingDone = !['agendada','noshow'].includes(cur);   // reunião aconteceu -> pede o resumo
   const resumoField = meetingDone ? `<label class="full">Resumo da call <small class="muted">(obrigatório após a reunião)</small><textarea data-cf="resumo_call" rows="3" placeholder="Como foi a call, dores, objeções, próximos passos...">${l.resumo_call||''}</textarea></label>` : '';
   const vendaField = (cur==='fechado') ? `<label class="full">Valor da venda (R$)<input type="number" min="0" step="100" data-cf="valor" value="${l.valor||''}"></label>` : '';
   const map = l.mapeamento ? `<div class="closer-map"><b>📋 Mapeamento do SDR</b><p>${String(l.mapeamento).replace(/</g,'&lt;')}</p></div>` : '';
-  return `<div class="stage-row">${pills}</div>
+  return `<div class="stage-row journey-stepper" role="group" aria-label="Etapa da call">${pills}</div>
     <div class="closer-fields">
       <div class="cf-row">
         <label>Produto<select data-cf="produto">${prodOpts}</select></label>
@@ -1150,7 +1194,7 @@ function renderJornadaCloser(){
   if(JQ.trim()){ const q=JQ.trim().toLowerCase(); leads=leads.filter(l=>(l.nome||'').toLowerCase().includes(q)); }
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=CLOSER_ETAPAS.map(E=>{const n=leads.filter(l=>closerEtapa(l)===E.k).length;
-    return `<div class="kpi none" style="border-left-color:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">calls</div></div>`;}).join('');
+    return `<div class="kpi none" style="--sc:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">calls</div></div>`;}).join('');
   const isMgr=me.role==='gestor';
   board.innerHTML=CLOSER_ETAPAS.map(E=>{
     const cs=leads.filter(l=>closerEtapa(l)===E.k);
@@ -1159,13 +1203,13 @@ function renderJornadaCloser(){
       const info=(l.produto||l.valor_proposto)?`<div class="muted sm" style="margin-top:4px">${l.produto?produtoLabel(l.produto):''}${l.valor_proposto?`${l.produto?' · ':''}${money(l.valor_proposto)} proposto`:''}</div>`:'';
       const val=l.vendeu&&l.valor?`<div class="jcard-cash">${money(l.valor)} vendido</div>`:'';
       const fl=leadFlagsHtml(l);
-      return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}"><b class="jopen">${l.nome||'(sem nome)'}</b>
+      return `<div class="jcard" data-lid="${l.id}" draggable="${canMove}"><div class="jcard-person">${avatarHtml(l.nome,l.foto_url||l.avatar_url,'avt-sm')}<b class="jopen">${l.nome||'(sem nome)'}</b></div>
         <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.icp?('ICP '+l.icp):''}</span>${waChipHtml(l.telefone)}${isMgr?`<span class="muted">${(getUsers().find(u=>u.id===l.closer_id)||{}).nome||''}</span>`:''}</div>
         ${fl?`<div class="jflags">${fl}</div>`:''}
         ${dt}${info}${val}</div>`;}).join(''):'<p class="muted sm">—</p>';
     return `<div class="jcol" data-cstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
   }).join('');
-  board.querySelectorAll('.jcard[data-lid] .jopen').forEach(nm=>nm.onclick=e=>{e.stopPropagation(); openEsteiraLeadModal(nm.closest('.jcard').dataset.lid);});
+  wireJourneyCards(board,'.jcard[data-lid]',card=>openEsteiraLeadModal(card.dataset.lid));
   if(canMove){
     board.querySelectorAll('.jcard[data-lid]').forEach(card=>{
       card.ondragstart=e=>{_dragId=card.dataset.lid;e.dataTransfer.effectAllowed='move';};
@@ -1189,18 +1233,18 @@ function renderJornadaCloserPipe(){
   const etapaDe=c=>ETAPA_MAP[c.etapa]?c.etapa:'1a_call';
   const kp=$('#jornadaKpis');
   if(kp) kp.innerHTML=ETAPAS.map(E=>{const n=cards.filter(c=>etapaDe(c)===E.k).length;
-    return `<div class="kpi none" style="border-left-color:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">deals</div></div>`;}).join('');
+    return `<div class="kpi none" style="--sc:${E.color}"><div class="k-label">${E.label}</div><div class="k-val">${intf(n)}</div><div class="k-meta">deals</div></div>`;}).join('');
   board.innerHTML=ETAPAS.map(E=>{
     const cs=cards.filter(c=>etapaDe(c)===E.k);
     const body=cs.length?cs.map(c=>{
       const info=(c.produto||c.valor_apresentado)?`<div class="muted sm" style="margin-top:4px">${c.produto?produtoLabel(c.produto):''}${Number(c.valor_apresentado)?`${c.produto?' · ':''}${money(c.valor_apresentado)} proposto`:''}</div>`:'';
       const val=E.k==='fechado'?`<div class="jcard-cash">${money(c.valor_contrato)} contratado · ${money(c.valor_coletado)} coletado</div>`:'';
-      return `<div class="jcard" data-pid="${c.id}" draggable="true"><b class="jopen">${c.lead_nome||'(sem nome)'}</b>
+      return `<div class="jcard" data-pid="${c.id}" draggable="true"><div class="jcard-person">${avatarHtml(c.lead_nome,c.foto_url||c.avatar_url,'avt-sm')}<b class="jopen">${c.lead_nome||'(sem nome)'}</b></div>
         <div class="jcard-foot"><span class="temp ${c.temperatura||'morno'}">${TEMP_LABEL[c.temperatura]||'Morno'}</span>${waChipHtml(c.telefone)}</div>
         ${info}${val}</div>`;}).join(''):'<p class="muted sm">·</p>';
     return `<div class="jcol" data-pstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
   }).join('');
-  board.querySelectorAll('.jcard[data-pid] .jopen').forEach(nm=>nm.onclick=e=>{e.stopPropagation(); openLeadModal(nm.closest('.jcard').dataset.pid);});
+  wireJourneyCards(board,'.jcard[data-pid]',card=>openLeadModal(card.dataset.pid));
   board.querySelectorAll('.jcard[data-pid]').forEach(card=>{
     card.ondragstart=e=>{_dragId=card.dataset.pid;e.dataTransfer.effectAllowed='move';};
     card.ondragend=()=>{_dragId=null;board.querySelectorAll('.jcol').forEach(c=>c.classList.remove('drop'));};
@@ -1222,7 +1266,7 @@ function openLeadModal(id){
   const m=$('#leadModal');
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   const movePills=own
-    ? `<div class="ml-move"><span class="ml-lbl">Mover na jornada:</span><div class="stage-row">${ETAPAS.map(s=>`<button type="button" class="stage-pill${s.k===c.etapa?' on':''}" data-mv="${s.k}" style="--sc:${s.color}">${s.label}</button>`).join('')}</div></div>
+    ? `<div class="ml-move"><span class="ml-lbl">Mover na jornada:</span><div class="stage-row journey-stepper" role="group" aria-label="Etapa do deal">${ETAPAS.map(s=>`<button type="button" class="stage-pill${s.k===c.etapa?' on':''}" data-mv="${s.k}" style="--sc:${s.color}" aria-pressed="${s.k===c.etapa}">${s.label}</button>`).join('')}</div></div>
        <div class="ml-actions"><button type="button" class="btn-mini" data-del="1">🗑 Excluir cliente</button></div>`
     : '';
   if(own){
@@ -1232,10 +1276,9 @@ function openLeadModal(id){
     const fechadoFields=c.etapa==='fechado'?`
         <label>Valor do contrato (R$)<input type="number" min="0" step="100" data-pf="valor_contrato" value="${c.valor_contrato??''}"></label>
         <label>Coletado · cash collect (R$)<input type="number" min="0" step="100" data-pf="valor_coletado" value="${c.valor_coletado??''}"></label>`:'';
-    m.innerHTML=`<div class="modal-card">
-      <button class="modal-x" id="mClose">×</button>
-      <h2>Editar deal</h2>
-      <p class="muted sm" style="margin:0 0 12px">Etapa atual: <b>${E.label}</b></p>
+    m.innerHTML=`<div class="modal-card lead-detail" role="dialog" aria-modal="true" aria-labelledby="leadTitle-${c.id}">
+      <button type="button" class="modal-x" id="mClose" aria-label="Fechar modal">×</button>
+      <header class="lead-modal-head">${avatarHtml(c.lead_nome,c.foto_url||c.avatar_url,'avt-lg')}<div><span class="lead-modal-kicker">Editar deal</span><h2 id="leadTitle-${c.id}">${escHtml(c.lead_nome||'(sem nome)')}</h2><span class="lead-stage-chip" style="--sc:${E.color||'var(--gold-2)'}">${E.label}</span></div></header>
       <form id="pipeEditForm" class="entry-form" style="margin:0">
         <label class="full">Cliente (nome)<input data-pf="lead_nome" value="${esc(c.lead_nome)}" required></label>
         <label>Produto<select data-pf="produto">${prodOpts}</select></label>
@@ -1250,20 +1293,19 @@ function openLeadModal(id){
     </div>`;
   } else {
     const fechadoInfo=c.etapa==='fechado'
-      ? `<div class="ml-row"><span>Valor do contrato</span><b>${money(c.valor_contrato)}</b></div>
-         <div class="ml-row"><span>Coletado (cash collect)</span><b class="cash">${money(c.valor_coletado)}</b></div>`
+      ? `<div class="ml-item"><span class="ml-chip-label">Valor do contrato</span><strong>${money(c.valor_contrato)}</strong></div>
+         <div class="ml-item"><span class="ml-chip-label">Cash collect</span><strong class="cash">${money(c.valor_coletado)}</strong></div>`
       : '';
-    m.innerHTML=`<div class="modal-card">
-      <button class="modal-x" id="mClose">×</button>
-      <h2>${c.lead_nome}</h2>
+    m.innerHTML=`<div class="modal-card lead-detail" role="dialog" aria-modal="true" aria-labelledby="leadTitle-${c.id}">
+      <button type="button" class="modal-x" id="mClose" aria-label="Fechar modal">×</button>
+      <header class="lead-modal-head">${avatarHtml(c.lead_nome,c.foto_url||c.avatar_url,'avt-lg')}<div><span class="lead-modal-kicker">Etapa atual</span><h2 id="leadTitle-${c.id}">${escHtml(c.lead_nome||'(sem nome)')}</h2><span class="lead-stage-chip" style="--sc:${E.color||'var(--gold-2)'}">${E.label}</span></div></header>
       <div class="ml-grid">
-        <div class="ml-row"><span>Produto</span><b>${c.produto?produtoLabel(c.produto)+' · '+money(PRODUCTS[c.produto].ticket):'·'}</b></div>
-        <div class="ml-row"><span>Temperatura</span><b>${TEMP_LABEL[c.temperatura]||'·'}</b></div>
-        <div class="ml-row"><span>Etapa atual</span><b>${E.label}</b></div>
-        <div class="ml-row"><span>WhatsApp</span><b>${c.telefone?waTelHtml(c.telefone):'·'}</b></div>
-        <div class="ml-row"><span>Valor proposto</span><b>${money(c.valor_apresentado)}</b></div>
+        <div class="ml-item"><span class="ml-chip-label">Produto</span><strong>${c.produto?produtoLabel(c.produto)+' · '+money(PRODUCTS[c.produto].ticket):'—'}</strong></div>
+        <div class="ml-item"><span class="ml-chip-label">Temperatura</span><strong>${TEMP_LABEL[c.temperatura]||'—'}</strong></div>
+        <div class="ml-item ml-item-action"><span class="ml-chip-label">WhatsApp</span><strong>${c.telefone?waTelHtml(c.telefone):'—'}</strong></div>
+        <div class="ml-item"><span class="ml-chip-label">Valor proposto</span><strong>${money(c.valor_apresentado)}</strong></div>
         ${fechadoInfo}
-        ${me.role==='gestor'?`<div class="ml-row"><span>Closer</span><b>${ownerName}</b></div>`:''}
+        ${me.role==='gestor'?`<div class="ml-item"><span class="ml-chip-label">Closer</span><strong>${ownerName||'—'}</strong></div>`:''}
       </div>
     </div>`;
   }
@@ -1481,7 +1523,7 @@ function filtrarSdrCards(){
   const cnt=$('#sdrCount'); if(cnt) cnt.textContent=`${n} leads`;
 }
 function sdrChecksHTML(l){ return SDR_CHECKS.map(c=>{ const on=chkLigado(l,c.f);
-  return `<button type="button" class="sdr-chk ${on?'on':''}${c.bad?' chk-bad':''}" data-id="${l.id}" data-f="${c.f}">${on?'✓ ':''}${c.label}</button>`;}).join('')
+  return `<button type="button" class="sdr-chk ${on?'on is-checked':''}${c.bad?' chk-bad':''}" data-id="${l.id}" data-f="${c.f}" aria-pressed="${on}"><span class="check-box" aria-hidden="true">${on?'✓':''}</span><span>${c.label}</span></button>`;}).join('')
   + (desqualificado(l)&&l.motivo?`<span class="desq-tag" title="Motivo da desqualificação">${motivoLabel(l.motivo)}</span>`:''); }
 function sdrAgendHTML(l){ return l.agendou ? `<div class="sdr-agend">
       <div class="sdr-agend-row">
@@ -1661,27 +1703,27 @@ function openEsteiraLeadModal(id){
   const isCloser = me.role==='closer' || (me.role==='gestor' && JVIEW==='closer');
   const orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'—';
   const sdrName=(getUsers().find(u=>u.id===l.sdr_id)||{}).nome||'—';
-  const etapa=isCloser
-    ? (CLOSER_ETAPAS.find(e=>e.k===closerEtapa(l))||{}).label||'—'
-    : (SDR_ETAPAS.find(e=>e.k===sdrEtapa(l))||{}).label||'—';
+  const stageDef=isCloser
+    ? CLOSER_ETAPAS.find(e=>e.k===closerEtapa(l))
+    : SDR_ETAPAS.find(e=>e.k===sdrEtapa(l));
+  const etapa=stageDef?.label||'—';
   const controls = isCloser
     ? `<div class="ml-move"><span class="ml-lbl">Atualizar call</span>
         <div class="sdr-card" data-clead="${l.id}">${closerControlsInner(l)}</div></div>`
     : `<div class="ml-move"><span class="ml-lbl">Mover na jornada</span>
-        <div class="stage-row">${SDR_ETAPAS.map(E=>`<button type="button" class="stage-pill${sdrEtapa(l)===E.k?' on':''}" data-mv="${E.k}" style="--sc:${E.color}">${E.label}</button>`).join('')}</div></div>
+        <div class="stage-row journey-stepper" role="group" aria-label="Etapa do lead">${SDR_ETAPAS.map(E=>`<button type="button" class="stage-pill${sdrEtapa(l)===E.k?' on':''}" data-mv="${E.k}" style="--sc:${E.color}" aria-pressed="${sdrEtapa(l)===E.k}">${E.label}</button>`).join('')}</div></div>
       <div class="ml-move"><span class="ml-lbl">Marcar o que já fez</span>
         <div class="sdr-card" data-lead="${l.id}"><div class="sdr-checks">${sdrChecksHTML(l)}</div>${sdrAgendHTML(l)}</div></div>`;
-  m.innerHTML=`<div class="modal-card">
-    <button class="modal-x" id="mClose">×</button>
-    <h2>${l.nome||'(sem nome)'}${leadFlagsHtml(l)}</h2>
+  m.innerHTML=`<div class="modal-card lead-detail" role="dialog" aria-modal="true" aria-labelledby="leadTitle-${l.id}">
+    <button type="button" class="modal-x" id="mClose" aria-label="Fechar modal">×</button>
+    <header class="lead-modal-head">${avatarHtml(l.nome,l.foto_url||l.avatar_url,'avt-lg')}<div><span class="lead-modal-kicker">Etapa atual</span><h2 id="leadTitle-${l.id}">${escHtml(l.nome||'(sem nome)')}</h2><div class="lead-stage-line"><span class="lead-stage-chip" style="--sc:${stageDef?.color||'var(--gold-2)'}">${etapa}</span>${leadFlagsHtml(l)}</div></div></header>
     <div class="ml-grid">
-      <div class="ml-row"><span>Etapa</span><b>${etapa}</b></div>
-      <div class="ml-row"><span>Origem</span><b>${orig}</b></div>
-      <div class="ml-row"><span>ICP</span><b>${l.icp?('ICP '+l.icp):(l.qualificado?'Qualificado':'—')}</b></div>
-      <div class="ml-row"><span>Telefone</span><b>${l.telefone?waTelHtml(l.telefone):'·'}</b></div>
-      <div class="ml-row"><span>E-mail</span><b>${l.email||'—'}</b></div>
-      ${l.agendado_em?`<div class="ml-row"><span>Call marcada</span><b>${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</b></div>`:''}
-      ${me.role==='gestor'?`<div class="ml-row"><span>SDR</span><b>${sdrName}</b></div>`:''}
+      <div class="ml-item"><span class="ml-chip-label">Origem</span><strong>${escHtml(orig)}</strong></div>
+      <div class="ml-item"><span class="ml-chip-label">ICP</span><strong>${l.icp?('ICP '+escHtml(l.icp)):(l.qualificado?'Qualificado':'—')}</strong></div>
+      <div class="ml-item ml-item-action"><span class="ml-chip-label">WhatsApp</span><strong>${l.telefone?waTelHtml(l.telefone):'—'}</strong></div>
+      <div class="ml-item"><span class="ml-chip-label">E-mail</span><strong>${escHtml(l.email||'—')}</strong></div>
+      ${l.agendado_em?`<div class="ml-item"><span class="ml-chip-label">Call marcada</span><strong>${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</strong></div>`:''}
+      ${me.role==='gestor'?`<div class="ml-item"><span class="ml-chip-label">SDR</span><strong>${escHtml(sdrName)}</strong></div>`:''}
     </div>
     ${controls}
   </div>`;
@@ -1700,21 +1742,42 @@ function openEsteiraLeadModal(id){
 
 // ---------- CALENDAR ----------
 let calMonth;
+let selectedCalDay='';
+function calendarScopeLeads(me){
+  const scheduled=(ESTEIRA||[]).filter(l=>l.agendou&&l.agendado_em);
+  if(me.role==='gestor') return scheduled;
+  if(me.role==='closer') return scheduled.filter(l=>l.closer_id==null||String(l.closer_id)===String(me.id));
+  return scheduled.filter(l=>String(l.sdr_id)===String(me.id));
+}
+function calendarLeadState(l){
+  if(l.compareceu===true) return {cls:'is-done',label:'Concluída'};
+  if(l.compareceu_confirmado===true&&l.compareceu!==true) return {cls:'is-missing',label:'No-show'};
+  if(l.agendou) return {cls:'is-scheduled',label:'Agendada'};
+  return {cls:'is-pending',label:'Pendente'};
+}
+function calendarOwner(l){
+  const id=l.closer_id||l.sdr_id;
+  return getUsers().find(u=>String(u.id)===String(id))||{nome:'Sem responsável'};
+}
 function renderCalendar(){
   const grid=$('#calGrid');grid.innerHTML='';
   const[y,m]=calMonth.split('-').map(Number);
   $('#calLabel').textContent=new Date(y,m-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
   const mp=$('#calMonthPick'); if(mp) mp.value=calMonth;
-  ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d=>grid.appendChild(el('div','cal-cell head',d)));
+  grid.setAttribute('role','grid'); grid.setAttribute('aria-label',`Calendário de ${$('#calLabel').textContent}`);
+  ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d=>{const head=el('div','cal-cell head',d);head.setAttribute('role','columnheader');grid.appendChild(head);});
   const first=new Date(y,m-1,1).getDay();
-  for(let i=0;i<first;i++)grid.appendChild(el('div','cal-cell empty'));
+  const prevDays=new Date(y,m-1,0).getDate();
+  for(let i=0;i<first;i++){
+    const outside=el('div','cal-cell outside-month',`<div class="cd">${prevDays-first+i+1}</div>`);
+    outside.setAttribute('role','gridcell'); outside.setAttribute('aria-hidden','true'); grid.appendChild(outside);
+  }
   const days=new Date(y,m,0).getDate();
   const me=curUser();const isMgr=me.role==='gestor';
   const teamUsers=getUsers().filter(u=>ENTRY_ROLES.includes(u.role));
+  const scheduled=calendarScopeLeads(me);
   const lg=$('#calLegend');
-  if(isMgr)lg.innerHTML=`<b>Cada letra = uma pessoa.</b> &nbsp; <span class="who-chip done">A</span> preencheu &nbsp; <span class="who-chip miss">A</span> faltou &nbsp; <span class="who-chip pending">A</span> ainda não &nbsp;·&nbsp; passe o mouse pra ver o nome`;
-  else lg.innerHTML=`<span class="dot dot-ok"></span> você preencheu &nbsp; <span class="dot dot-bad"></span> você faltou &nbsp; <span class="dot dot-none"></span> ainda não`;
-  const initialOf=n=>(String(n).replace(/\(.*\)/,'').trim()[0]||'?').toUpperCase();
+  lg.innerHTML=`<span class="legend-title">Agenda</span><span class="legend-item"><i class="legend-swatch is-scheduled"></i> agendada</span><span class="legend-item"><i class="legend-swatch is-done"></i> concluída</span><span class="legend-item"><i class="legend-swatch is-missing"></i> no-show</span><span class="legend-note">${isMgr?'Avatares no rodapé mostram os lançamentos do time.':'Seu avatar no rodapé mostra o lançamento do dia.'}</span>`;
   const START='2026-07-06';   // kick-off da operação (segunda). Antes disso o calendário fica apagado.
   for(let d=1;d<=days;d++){
     const ds=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -1722,46 +1785,56 @@ function renderCalendar(){
     const entries=getEntries().filter(e=>e.date===ds);
     const dow=new Date(ds+'T00:00:00').getDay();   // fim de semana é opcional: pode preencher, mas não conta como falta
     const countable=(ds>=START && ds<=TODAY && dow!==0 && dow!==6);
-    const cell=el('div','cal-cell'+(ds===TODAY?' today':''));
+    const cell=el('div','cal-cell'+(ds===TODAY?' today':'')+(ds===selectedCalDay?' is-selected':''));
     let dots='',miss=false;
     if(isMgr){
       for(const u of teamUsers){const has=entries.some(e=>e.userId===u.id);const st=has?'done':(countable?'miss':'pending');if(!has&&countable)miss=true;
-        dots+=`<span class="who-chip ${st}" title="${u.nome} (${ROLES[u.role].label}) — ${has?'lançou ✓':(countable?'faltou ✗':'—')}">${initialOf(u.nome)}</span>`;}
+        const status=has?'lançou ✓':(countable?'faltou ✗':'ainda não');
+        dots+=calendarAvatarHtml(u.nome,u.foto_url||u.avatar_url,'avt-sm',`fill-${st}`,`${u.nome} (${ROLES[u.role].label}) — ${status}`);}
     } else {
-      const has=entries.some(e=>e.userId===me.id);const cls=has?'dot-ok':(countable?'dot-bad':'dot-none');miss=!has&&countable;
-      dots=`<span class="dot ${cls}"></span> <small style="font-size:10px;font-weight:700;color:${has?'var(--ok)':(countable?'var(--bad)':'var(--mut)')}">${has?'ok':(countable?'faltou':'')}</small>`;
+      const has=entries.some(e=>e.userId===me.id),st=has?'done':(countable?'miss':'pending');miss=!has&&countable;
+      dots=calendarAvatarHtml(me.nome,me.foto_url||me.avatar_url,'avt-sm',`fill-${st}`,`${me.nome} — ${has?'lançou ✓':(countable?'faltou ✗':'ainda não')}`);
     }
     if(miss)cell.classList.add('cell-miss');
-    cell.innerHTML=`<div class="cd">${d}</div>${tr?`<div class="cl">${tr.leads} leads</div>`:''}<div class="dots">${dots}</div>`;
-    cell.onclick=()=>showDay(ds);
+    const calls=scheduled.filter(l=>String(l.agendado_em||'').slice(0,10)===ds).sort((a,b)=>String(a.agendado_hora||'').localeCompare(String(b.agendado_hora||'')));
+    const events=calls.slice(0,2).map(l=>{const st=calendarLeadState(l),owner=calendarOwner(l),firstName=String(owner.nome||'Sem responsável').split(/\s+/)[0];const title=`${owner.nome} · ${l.nome||'(sem nome)'}`;return `<div class="cal-event ${st.cls}" title="${escHtml(title)}" aria-label="${escHtml(`${l.agendado_hora||'Sem horário'} · ${title} · ${st.label}`)}"><span class="cal-event-mark" aria-hidden="true"></span><span class="cal-event-time">${escHtml(l.agendado_hora||'—')}</span>${calendarAvatarHtml(owner.nome,owner.foto_url||owner.avatar_url,'avt-xs')}<span class="cal-event-label">${escHtml(firstName)}</span></div>`;}).join('');
+    const hiddenCount=Math.max(0,calls.length-2);
+    const more=hiddenCount?`<span class="cal-more">+ ${hiddenCount} evento${hiddenCount>1?'s':''}</span>`:'';
+    cell.innerHTML=`<div class="cd">${d}</div>${tr?`<div class="cl">${intf(tr.leads)} leads</div>`:''}<div class="cal-events" aria-label="Eventos de ${fmtDate(ds)}">${events}${more}</div><div class="dots">${dots}</div>`;
+    cell.dataset.date=ds; cell.tabIndex=0; cell.setAttribute('role','gridcell'); cell.setAttribute('aria-label',`${fmtDate(ds)}: ${intf(calls.length)} reunião${calls.length===1?'':'ões'}${tr?`, ${intf(tr.leads)} leads`:''}`); if(ds===selectedCalDay)cell.setAttribute('aria-selected','true');
+    const openDay=e=>{if(e.type==='keydown'&&!['Enter',' '].includes(e.key))return;if(e.type==='keydown')e.preventDefault();showDay(ds);};
+    cell.onclick=openDay; cell.onkeydown=openDay;
     grid.appendChild(cell);
+  }
+  const trailing=42-first-days;
+  for(let d=1;d<=trailing;d++){
+    const outside=el('div','cal-cell outside-month',`<div class="cd">${d}</div>`);
+    outside.setAttribute('role','gridcell'); outside.setAttribute('aria-hidden','true'); grid.appendChild(outside);
   }
 }
 function showDay(ds){
-  const F=computeFunnel([ds]);const box=$('#dayDetail');box.hidden=false;
-  const me=curUser();const team=getUsers().filter(u=>ENTRY_ROLES.includes(u.role));const ent=getEntries().filter(e=>e.date===ds);
-  const START=TRAFFIC.daily.length?TRAFFIC.daily[0].date:TODAY;
-  let fillHtml='';
-  if(ds>=START){
-    if(me.role==='gestor'){fillHtml=`<div class="fill-list"><b>Quem lançou:</b> `+(team.length?team.map(u=>{const has=ent.some(e=>e.userId===u.id);return `<span class="fill-pill ${has?'ok':'bad'}">${has?'✓':'✗'} ${u.nome}</span>`;}).join(' '):'<span class="muted">ninguém cadastrado</span>')+`</div>`;}
-    else{const has=ent.some(e=>e.userId===me.id);fillHtml=`<div class="fill-list"><span class="fill-pill ${has?'ok':'bad'}">${has?'✓ Você lançou esse dia':'✗ Você não lançou esse dia'}</span></div>`;}
-  }
-  box.innerHTML=`<h2>${fmtDate(ds)} · detalhe do dia</h2>${fillHtml}
-   <div class="kpi-grid">
-     <div class="kpi none"><div class="k-label">Leads</div><div class="k-val">${intf(F.leads)}</div></div>
-     <div class="kpi none"><div class="k-label">Agendadas</div><div class="k-val">${intf(F.agendadas)}</div></div>
-     <div class="kpi none"><div class="k-label">Feitas</div><div class="k-val">${intf(F.feitas)}</div></div>
-     <div class="kpi none"><div class="k-label">Vendas</div><div class="k-val">${intf(F.vendas)}</div></div>
-     <div class="kpi ${statusCls(F.showRate,'show_rate')}"><div class="k-label">Show-rate</div><div class="k-val">${pct(F.showRate)}</div></div>
-     <div class="kpi ${statusCls(F.closeRate,'close_rate')}"><div class="k-label">Close rate</div><div class="k-val">${pct(F.closeRate)}</div></div>
-   </div>`;
+  selectedCalDay=ds;
+  document.querySelectorAll('#calGrid .cal-cell[data-date]').forEach(cell=>{const on=cell.dataset.date===ds;cell.classList.toggle('is-selected',on);if(on)cell.setAttribute('aria-selected','true');else cell.removeAttribute('aria-selected');});
+  const box=$('#dayDetail'),me=curUser(),all=calendarScopeLeads(me);
+  const calls=all.filter(l=>String(l.agendado_em||'').slice(0,10)===ds).sort((a,b)=>String(a.agendado_hora||'').localeCompare(String(b.agendado_hora||'')));
+  const agendaRows=calls.length?calls.map(l=>{const st=calendarLeadState(l),owner=calendarOwner(l),orig=l.funil||(l.campanha||'').replace(/\[[^\]]*\]/g,'').trim()||'—';return `<article class="agenda-item ${st.cls}" data-lead="${l.id}" role="button" tabindex="0" aria-label="Abrir ${escHtml(l.nome||'lead')}"><span class="agenda-hour">${escHtml(l.agendado_hora||'—')}</span><div class="agenda-body"><div class="agenda-person">${calendarAvatarHtml(owner.nome,owner.foto_url||owner.avatar_url,'avt-sm')}<span>${escHtml(owner.nome)}</span></div><span class="agenda-lead">${escHtml(l.nome||'(sem nome)')} · ${escHtml(orig)}</span><span class="agenda-status">${st.label}</span></div></article>`;}).join(''):'<p class="context-empty">Nenhuma reunião neste dia. Selecione outra data para consultar a agenda.</p>';
+  const date=new Date(ds+'T00:00:00'),weekStart=addDays(ds,-date.getDay()),weekEnd=addDays(weekStart,6),weekSet=new Set(datesBetween(weekStart,weekEnd));
+  const weekMeetings=all.filter(l=>weekSet.has(String(l.agendado_em||'').slice(0,10))),weekDone=weekMeetings.filter(l=>l.compareceu===true).length;
+  const weekLeads=TRAFFIC.daily.filter(d=>weekSet.has(d.date)).reduce((sum,d)=>sum+(Number(d.leads)||0),0),attendance=weekMeetings.length?100*weekDone/weekMeetings.length:0;
+  const weekStartDate=new Date(weekStart+'T00:00:00'),weekEndDate=new Date(weekEnd+'T00:00:00');
+  const weekLabel=weekStartDate.getMonth()===weekEndDate.getMonth()?`${weekStartDate.getDate()}–${weekEndDate.getDate()} de ${weekEndDate.toLocaleDateString('pt-BR',{month:'long'})}`:`${fmtDate(weekStart)}–${fmtDate(weekEnd)}`;
+  const fullDate=date.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'}).replace(/^./,c=>c.toUpperCase());
+  const metric=(cls,label,value,progress,max=100)=>`<div class="week-metric ${cls}"><div class="week-metric-head"><span class="week-metric-label">${label}</span><span class="week-metric-value">${value}</span></div><div class="week-track" role="progressbar" aria-valuenow="${Math.round(progress)}" aria-valuemin="0" aria-valuemax="${max}"><span style="--metric-value:${Math.max(0,Math.min(100,progress))}%"></span></div></div>`;
+  box.innerHTML=`<div class="context-head"><div><span class="context-kicker">Dia selecionado</span><h2>${fullDate}</h2></div><span class="context-count" aria-label="${calls.length} reuniões">${calls.length}</span></div><div class="context-agenda" aria-label="Agenda do dia selecionado">${agendaRows}</div><section class="week-summary" aria-labelledby="weekSummaryTitle"><span class="week-kicker">${weekLabel}</span><h3 id="weekSummaryTitle">Resumo da semana</h3><div class="week-metrics">${metric('is-meetings','Reuniões',intf(weekMeetings.length),weekMeetings.length?100:0)}${metric('is-attendance','Comparecimento',pct(attendance),attendance)}${metric('is-leads','Leads',intf(weekLeads),weekLeads?100:0)}</div></section>`;
+  box.hidden=false;
+  box.querySelectorAll('.agenda-item[data-lead]').forEach(row=>{const open=e=>{if(e.type==='keydown'&&!['Enter',' '].includes(e.key))return;if(e.type==='keydown')e.preventDefault();openEsteiraLeadModal(row.dataset.lead);};row.onclick=open;row.onkeydown=open;});
 }
 
 // ---------- EQUIPE & METAS ----------
 function renderEquipe(){
   const t=$('#teamTbl');const users=getUsers();
   t.innerHTML='<tr><th>Nome</th><th>Login</th><th>Função</th></tr>'+
-    (users.length?users.map(u=>`<tr><td><span class="tm-ava">${(u.nome||'?').trim()[0].toUpperCase()}</span>${u.nome}</td><td>${u.login}</td><td><span class="tag ${u.role}">${ROLES[u.role].label}</span></td></tr>`).join(''):'<tr><td colspan=3 class="muted">Ninguém cadastrado ainda.</td></tr>');
+    (users.length?users.map(u=>`<tr><td>${avatarHtml(u.nome,u.foto_url||u.avatar_url,'tm-ava avt-lg')}${u.nome}</td><td>${u.login}</td><td><span class="tag ${u.role}">${ROLES[u.role].label}</span></td></tr>`).join(''):'<tr><td colspan=3 class="muted">Ninguém cadastrado ainda.</td></tr>');
   const isMgr=curUser().role==='gestor';
   const mt=$('#metaTbl');const M=getMetas();
   mt.innerHTML='<tr><th>Métrica</th><th>Direção</th><th>Meta</th></tr>'+

@@ -1,0 +1,1068 @@
+/* ==========================================================================
+   UX-SHELL · camada visual carregada depois de styles.css
+   Escopo: casca, leitura global, controles, tabelas genericas e login.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Base de leitura
+   -------------------------------------------------------------------------- */
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+
+h1,
+h2,
+h3,
+p {
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: clamp(1.65rem, 1.25rem + 1.1vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.tabpane {
+  width: 100%;
+  max-width: 1480px;
+  padding: clamp(1.25rem, 2.5vw, 2.5rem) clamp(1rem, 3.2vw, 3.5rem) 3rem;
+}
+
+.tabpane > *,
+.subpane > * {
+  min-width: 0;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: clamp(1rem, 1.8vw, 1.5rem);
+  box-shadow: var(--shadow);
+}
+
+.card h2 {
+  margin: 0 0 1rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.section-title {
+  margin: 2rem 0 0.8rem;
+  color: var(--mut);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.section-title small {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.muted,
+.mut {
+  color: var(--mut);
+}
+
+.sm {
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+/* Ritmo entre blocos de conteudo sem forcar margens nos componentes internos. */
+.subpane > .kpi-grid + *,
+.subpane > .two-col + *,
+.subpane > .section-title + *,
+.tabpane > .card + *,
+.tabpane > .two-col + * {
+  margin-top: 1.25rem;
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar e navegacao
+   -------------------------------------------------------------------------- */
+.sidebar {
+  width: 248px;
+  gap: 0.5rem;
+  padding: 1.5rem 1rem 1.125rem;
+  background: var(--glass-nav);
+  border-right: 1px solid var(--line);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.sb-brand {
+  min-height: 3rem;
+  gap: 0.5rem;
+  padding: 0 0.5rem 1.125rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.sb-brand .brand-ico.big {
+  width: 2rem;
+  height: 2rem;
+  margin-right: 0.125rem;
+}
+
+.sb-collapse {
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+.sb-collapse:hover {
+  background: var(--panel2);
+  color: var(--ink);
+}
+
+.sb-user {
+  min-height: 3.5rem;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  margin: 0 0 0.875rem;
+  background: var(--glass-control);
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.sb-avatar {
+  width: 2.125rem;
+  height: 2.125rem;
+}
+
+.whoami {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.tabs {
+  gap: 0.375rem;
+}
+
+.tab {
+  min-height: 2.75rem;
+  gap: 0.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.2;
+}
+
+.tab:hover {
+  background: var(--panel2);
+  color: var(--ink);
+}
+
+.tab.active {
+  padding: 0 0.75rem;
+  background: var(--gold-2);
+  border-color: var(--gold-2);
+  color: var(--gold-ink);
+  box-shadow: none;
+}
+
+.tab.active .tab-ico {
+  color: var(--gold-ink);
+}
+
+[data-theme="light"] .sidebar .tab.active {
+  background: var(--gold-2);
+  border-color: var(--gold-2);
+  color: var(--gold-ink);
+}
+
+[data-theme="light"] .sidebar .tab.active .tab-ico {
+  color: var(--gold-ink);
+}
+
+.sb-foot {
+  gap: 0.5rem;
+  padding-top: 1rem;
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+}
+
+.sb-foot .btn-ghost {
+  min-height: 2.75rem;
+}
+
+#app.sb-min .sidebar {
+  width: 84px;
+  padding: 1.5rem 0.625rem 1.125rem;
+}
+
+#app.sb-min .sb-brand {
+  min-height: 0;
+  gap: 0.75rem;
+  padding: 0 0 1rem;
+}
+
+#app.sb-min .sb-user {
+  min-height: 3rem;
+  padding: 0.5rem 0;
+}
+
+#app.sb-min .tab {
+  min-height: 3rem;
+  padding: 0;
+}
+
+#app.sb-min .sb-foot .btn-ghost {
+  min-height: 3rem;
+  padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Cabecalhos de pagina e sub-abas
+   -------------------------------------------------------------------------- */
+.pane-head.hero-head {
+  align-items: flex-end;
+  gap: 1.5rem;
+  padding: 0.5rem 0 1.125rem;
+  margin-bottom: 1.25rem;
+}
+
+.ph-title {
+  gap: 0.375rem;
+}
+
+.pane-kicker {
+  color: var(--gold-text);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.hero-head h1 {
+  font-size: clamp(1.65rem, 1.25rem + 1.1vw, 2rem);
+  line-height: 1.1;
+}
+
+.pane-sub {
+  max-width: 42rem;
+  margin: 0.125rem 0 0;
+  color: var(--mut);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.subtabs {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: none;
+  scrollbar-width: none;
+}
+
+.subtabs::-webkit-scrollbar {
+  display: none;
+}
+
+.subtab {
+  min-height: 2.5rem;
+  flex: 0 0 auto;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.subtab:hover {
+  background: var(--panel2);
+  color: var(--ink);
+}
+
+.subtab.active {
+  background: var(--gold-2);
+  color: var(--gold-ink);
+  box-shadow: none;
+}
+
+/* --------------------------------------------------------------------------
+   Periodo, datas e controles de calendario
+   -------------------------------------------------------------------------- */
+.period-wrap {
+  gap: 0.625rem;
+}
+
+.period-sel,
+.period-range,
+.cal-nav {
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.period-sel {
+  gap: 0.125rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+}
+
+.period-sel button,
+.cal-nav button {
+  min-width: 2.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  color: var(--ink2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.period-sel button:hover,
+.cal-nav button:hover {
+  background: var(--panel2);
+  color: var(--ink);
+}
+
+.period-sel button.active {
+  background: var(--gold-2);
+  color: var(--gold-ink);
+}
+
+.period-range {
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  color: var(--ink2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.period-range .ico {
+  width: 1rem;
+  height: 1rem;
+  color: var(--gold-text);
+}
+
+.period-range input,
+.date-pick input {
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--panel2);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.period-range input:hover,
+.date-pick input:hover {
+  border-color: var(--gold-line);
+}
+
+.date-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  color: var(--ink2);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.date-pick input {
+  margin-left: 0;
+}
+
+.cal-nav {
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+}
+
+.cal-nav span {
+  min-width: 8.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+
+/* --------------------------------------------------------------------------
+   Sistema de botoes, foco e chips
+   -------------------------------------------------------------------------- */
+.btn-primary,
+.btn-ghost,
+.theme-btn,
+.btn-mini,
+.stage-pill,
+.sdr-chk,
+.sdr-fil,
+.fpick,
+.jt {
+  min-height: 2.5rem;
+  font-family: inherit;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.btn-primary {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1px solid var(--gold-2);
+  border-radius: 0.75rem;
+  background: var(--gold-2);
+  color: var(--gold-ink);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.btn-primary:hover {
+  background: var(--gold);
+  border-color: var(--gold);
+  filter: none;
+}
+
+.btn-primary:active {
+  background: var(--gold-2);
+}
+
+.btn-ghost {
+  min-height: 2.5rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.btn-ghost:hover {
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+  color: var(--gold-text);
+}
+
+.btn-ghost:active {
+  background: var(--panel2);
+}
+
+.theme-btn {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink2);
+  box-shadow: var(--shadow);
+}
+
+.theme-btn:hover {
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+  color: var(--gold-text);
+}
+
+.btn-mini,
+.stage-pill,
+.sdr-chk,
+.sdr-fil,
+.fpick,
+.jt {
+  border-radius: 999px;
+}
+
+.btn-mini {
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--ink2);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.btn-mini:hover,
+.stage-pill:hover,
+.sdr-fil:hover,
+.sdr-chk:hover,
+.fpick:hover,
+.jt:hover {
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+  color: var(--gold-text);
+}
+
+.btn-mini.ok,
+.sdr-chk.ok,
+.sdr-fil.on,
+.jt.on {
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+  color: var(--gold-text);
+}
+
+.btn-mini.bad,
+.sdr-chk.bad {
+  border-color: var(--bad-text);
+  color: var(--bad-text);
+}
+
+.btn-mini:disabled:hover,
+.sdr-chk:disabled:hover {
+  border-color: var(--line);
+  background: var(--panel2);
+  color: var(--mut);
+}
+
+.tag,
+.badge,
+.fill-pill,
+.temp,
+.pipe-status,
+.fn-conv,
+.icp-pill,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.badge,
+.fill-pill,
+.tag {
+  max-width: 100%;
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   Dashboard Geral: conteudo variavel e paineis de grafico
+   -------------------------------------------------------------------------- */
+.kpi-grid,
+.ticket-grid,
+.kpi,
+.ticket-card,
+.chart-box {
+  min-width: 0;
+}
+
+.kpi .k-label,
+.kpi .k-val,
+.kpi .k-meta,
+.ticket-card .t-name,
+.ticket-card .t-ticket,
+.ticket-card .t-stats,
+.ticket-card .t-money {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+#sub-geral > .ticket-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+
+.chart-box {
+  width: 100%;
+}
+
+.chart-box canvas {
+  max-width: 100%;
+}
+
+.badge:not(.ok):not(.bad):not(.none),
+.fill-pill:not(.ok):not(.bad),
+.pill {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--ink2);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+  box-shadow: var(--focus);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.btn-primary:disabled:hover {
+  border-color: var(--gold-2);
+  background: var(--gold-2);
+  color: var(--gold-ink);
+  filter: none;
+}
+
+.btn-ghost:disabled:hover,
+.theme-btn:disabled:hover {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink2);
+  filter: none;
+}
+
+/* --------------------------------------------------------------------------
+   Tabelas genericas (nunca alcanca #tab-equipe)
+   -------------------------------------------------------------------------- */
+.tabpane:not(#tab-equipe) .tbl {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.tabpane:not(#tab-equipe) .tbl th,
+.tabpane:not(#tab-equipe) .tbl td {
+  padding: 0.75rem 0.625rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabpane:not(#tab-equipe) .tbl th {
+  color: var(--mut);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tabpane:not(#tab-equipe) .tbl tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tabpane:not(#tab-equipe) .tbl tbody tr:hover {
+  background: var(--row-tint2);
+}
+
+.tabpane:not(#tab-equipe) .tbl input {
+  min-height: 2.5rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--panel2);
+  color: var(--ink);
+}
+
+/* --------------------------------------------------------------------------
+   Avisos e login
+   -------------------------------------------------------------------------- */
+.missing-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--bad-text);
+  border-left: 0.25rem solid var(--bad);
+  border-radius: 0.875rem;
+  background: var(--bad-bg);
+  color: var(--bad-text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.45;
+  box-shadow: none;
+}
+
+.missing-banner b {
+  color: var(--bad-text);
+}
+
+.login-wrap {
+  padding: 1.5rem;
+  background: var(--login-bg);
+}
+
+.login-card {
+  width: min(400px, calc(100vw - 2rem));
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  color: var(--ink);
+  font-size: 1.5rem;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.login-brand small {
+  margin-top: 0.5rem;
+  color: var(--mut);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+}
+
+.login-form {
+  gap: 0.875rem;
+  margin-top: 1.5rem;
+}
+
+.login-form label,
+.entry-form label {
+  gap: 0.5rem;
+  color: var(--ink2);
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.login-form input,
+.login-form select,
+.entry-form input,
+.entry-form select,
+.entry-form textarea {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel2);
+  color: var(--ink);
+  font-size: 0.875rem;
+}
+
+.login-form .btn-primary {
+  width: 100%;
+  min-height: 2.875rem;
+  margin-top: 0.25rem;
+}
+
+.login-msg {
+  min-height: 1.125rem;
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.login-hint {
+  max-width: 18rem;
+  margin: 1.25rem auto 0;
+  color: var(--mut);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.login-tabs {
+  margin: 1.5rem 0 1rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel);
+}
+
+.lt {
+  min-height: 2.5rem;
+}
+
+.login-theme,
+.app-theme {
+  top: 1rem;
+  right: 1rem;
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+
+/* --------------------------------------------------------------------------
+   Prova local: mostra o login sem alterar o markup real do produto.
+   -------------------------------------------------------------------------- */
+.shell-proof #loginScreen.login-wrap {
+  position: relative;
+  inset: auto;
+  min-height: 31rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.shell-proof #loginScreen .login-theme {
+  position: absolute;
+}
+
+.shell-proof .proof-login-title {
+  width: min(400px, calc(100vw - 2rem));
+  margin: 2rem auto 0;
+  color: var(--mut);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   Responsivo
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .tabpane {
+    padding-bottom: 5rem;
+  }
+
+  .sidebar {
+    width: 100%;
+    gap: 0.625rem;
+    padding: 0.75rem 0.875rem 0.625rem;
+  }
+
+  .sb-brand {
+    min-height: 2.75rem;
+    padding: 0;
+    margin: 0 auto 0 0;
+    border-bottom: 0;
+  }
+
+  .sb-user {
+    min-height: 2.75rem;
+    padding: 0.375rem 0.625rem;
+    margin: 0;
+  }
+
+  .sb-foot {
+    padding: 0;
+    border-top: 0;
+  }
+
+  .tabs {
+    gap: 0.375rem;
+    padding-bottom: 0.125rem;
+  }
+
+  .tab {
+    min-height: 2.75rem;
+    padding: 0 0.875rem;
+  }
+
+  #app.sb-min .sidebar {
+    width: 100%;
+    padding: 0.75rem 0.875rem 0.625rem;
+  }
+
+  .pane-head.hero-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+    padding-top: 0.25rem;
+  }
+
+  #sub-geral > .two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .period-wrap {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .period-sel,
+  .period-range {
+    flex: 0 1 auto;
+  }
+
+  .sb-collapse {
+    display: none;
+  }
+
+  .app-theme {
+    top: auto;
+    bottom: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .tabpane {
+    padding: 1.25rem 0.875rem 2.25rem;
+  }
+
+  .hero-head h1 {
+    font-size: 1.6rem;
+  }
+
+  .app-theme {
+    top: 0.75rem;
+    right: auto;
+    bottom: auto;
+    left: calc(50% - 1.375rem);
+  }
+
+  .pane-sub {
+    font-size: 0.75rem;
+  }
+
+  .period-wrap {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .period-sel {
+    width: 100%;
+  }
+
+  .period-sel,
+  .period-range {
+    flex: 1 1 auto;
+  }
+
+  .period-sel button {
+    flex: 1 1 0;
+    min-height: 2.75rem;
+    padding: 0 0.375rem;
+  }
+
+  .period-range {
+    display: grid;
+    width: 100%;
+    grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.875rem;
+  }
+
+  .period-range input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .date-pick {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .date-pick input {
+    flex: 1;
+    max-width: 13rem;
+  }
+
+  .subtabs {
+    display: flex;
+    width: 100%;
+    border-radius: 0.875rem;
+  }
+
+  .subtab {
+    flex: 1 0 auto;
+    padding: 0 0.75rem;
+  }
+
+  .card {
+    border-radius: 1rem;
+    padding: 1rem;
+  }
+
+  .tabpane:not(#tab-equipe) .tbl {
+    min-width: 34rem;
+  }
+
+  .tabpane:not(#tab-equipe) .card:has(.tbl) {
+    overflow-x: auto;
+  }
+
+  .login-wrap {
+    padding: 1rem;
+  }
+
+  .login-card {
+    width: min(400px, calc(100vw - 2rem));
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1240px) {
+  #finKpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1480px) {
+  #app:not(.sb-min) #finKpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 390px) {
+  .sb-brand {
+    font-size: 0.9375rem;
+  }
+
+  .tab {
+    padding: 0 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .period-sel button {
+    font-size: 0.6875rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sb-collapse svg,
+  button,
+  input,
+  select,
+  textarea {
+    transition: none !important;
+  }
+
+  button:not(:disabled):active {
+    transform: none;
+  }
+}
