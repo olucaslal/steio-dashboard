@@ -75,6 +75,7 @@ const SUPA_KEY='sb_publishable_T4aAxGIFncLq_MLEvQ6Nag_0IUnuM6f';
 const EMAIL_DOMAIN='@steio.local';            // login "gabriel" -> gabriel@steio.local (interno, não envia email)
 const sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
 let USERS=[], ENTRIES=[], PROFILE=null, PIPELINE=[], METAS_DB={}, ESTEIRA=[];
+let SOUND_ON=false, _audioCtx=null, _seenLeadIds=null; try{ SOUND_ON=localStorage.getItem('dc_leadSound')==='1'; }catch(e){}
 async function loadProfile(){ const {data:{user}}=await sb.auth.getUser(); if(!user){PROFILE=null;return null;}
   const {data}=await sb.from('profiles').select('id,login,nome,role').eq('id',user.id).single(); PROFILE=data; return data; }
 async function loadUsers(){ const {data}=await sb.from('profiles').select('id,login,nome,role'); USERS=data||[]; }
@@ -106,7 +107,22 @@ async function overlayLiveLeads(){
   }catch(e){ /* mantém dc_traffic se a fonte real-time falhar */ }
 }
 async function loadPipeline(){ const {data}=await sb.from('dc_pipeline').select('*').order('created_at',{ascending:false}); PIPELINE=data||[]; }
-async function loadEsteira(){ const {data}=await sb.from('dc_leads').select('*').order('data_chegada',{ascending:false}).limit(1500); ESTEIRA=data||[]; }
+let _esteiraSince=null, _pollCount=0;
+function _maxTs(rows){ let m=_esteiraSince; for(const r of (rows||[])){ const t=r.updated_at||r.data_chegada; if(t&&(!m||t>m))m=t; } return m; }
+// ECONOMIA DE BANDA (egress): no poll de 25s, só puxa o que MUDOU desde a última carga (antes recarregava
+// os ~1500 leads inteiros toda vez, o que torrava GBs/dia). Full load só no login e a cada ~20 min (reconcilia).
+async function loadEsteira(incremental){
+  if(incremental && _esteiraSince && Array.isArray(ESTEIRA) && ESTEIRA.length){
+    const {data}=await sb.from('dc_leads').select('*')
+      .or(`updated_at.gt.${_esteiraSince},data_chegada.gt.${_esteiraSince}`).limit(1500);
+    const chg=data||[];
+    if(chg.length){ const byId=new Map(ESTEIRA.map(l=>[l.id,l])); for(const r of chg) byId.set(r.id,r);
+      ESTEIRA=[...byId.values()].sort((a,b)=> (a.data_chegada<b.data_chegada?1:-1)); }
+    _esteiraSince=_maxTs(chg)||_esteiraSince; return;
+  }
+  const {data}=await sb.from('dc_leads').select('*').order('data_chegada',{ascending:false}).limit(1500);
+  ESTEIRA=data||[]; _esteiraSince=_maxTs(ESTEIRA);
+}
 async function loadMetas(){ const {data}=await sb.from('dc_metas').select('chave,target'); METAS_DB=Object.fromEntries((data||[]).map(r=>[r.chave,Number(r.target)])); }
 async function loadAll(){ await loadProfile(); await Promise.all([loadUsers(),loadEntries(),loadTraffic(),loadPipeline(),loadMetas(),loadEsteira()]); }
 const getUsers   = ()=>USERS;
@@ -144,6 +160,8 @@ function waTelHtml(tel){
   if(!href) return `<span>${escHtml(tel)}</span>`;
   return `<a class="wa-link" href="${href}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ICO_WA}${escHtml(formatTel(tel))}</a>`;
 }
+// número copiável do WhatsApp (com DDI 55): "5521969736286"
+function waNumber(tel){ const h=waHref(tel); return h?h.replace('https://wa.me/',''):String(tel||'').replace(/\D/g,''); }
 // Chip discreto pra cards compactos que não exibem o número
 function waChipHtml(tel){
   const href=waHref(tel); if(!href) return '';
@@ -554,10 +572,10 @@ function openJornadaProdutoModal(k){
 
 // ===== Sub-aba FUNIL DE VENDA (seletor de funil -> funil comercial + custos + árvore de campanhas) =====
 const DC_METRICS_API='https://steio.vercel.app/api/dc-metrics';
-const FUNIS_VENDA=['Formulário V1','Formulário V3','Formulário V4','Typebot','Página (Site)','Social Selling','Link da Bio'];
+const FUNIS_VENDA=['Formulário V1','Formulário V3','Formulário V4','Typebot','Página (Site)','CPV','Social Selling','Link da Bio'];
 // "Geral" soma os funis de captação paga; NÃO entram Social Selling nem Link da Bio.
 const GERAL_FUNIS=['Formulário V1','Formulário V3','Formulário V4','Typebot','Página (Site)'];
-const FUNIL_APELIDO={'Geral':'Geral','Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Formulário V4':'Formulário V4','Typebot':'Typebot','Página (Site)':'Página','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
+const FUNIL_APELIDO={'Geral':'Geral','Formulário V1':'Formulário V1','Formulário V3':'Formulário V3','Formulário V4':'Formulário V4','Typebot':'Typebot','Página (Site)':'Página','CPV':'CPV (Formação)','Social Selling':'Social Selling','Link da Bio':'Link da Bio'};
 const STEP_DEFS=[['leads','Chegaram','#3b82f6'],['qualificados','Qualificados','#6366f1'],['responderam','Responderam','#8b5cf6'],['agendaram','Agendaram','#a855f7'],['compareceram','Compareceram','#0ea5e9'],['venderam','Vendas','#22c55e']];
 let _dcCache={key:'',data:null};
 let SELFUNIL='Geral';
@@ -893,7 +911,7 @@ function renderJornadaSDR(){
     return `<div class="jcard jcard-antigo" data-lid="${l.id}" data-nome="${buscaHay(l)}" draggable="${canMove}">
       <div class="jcard-person">${avatarHtml(l.nome,l.foto_url||l.avatar_url,'avt-sm')}<b class="jopen">${l.nome||'(sem nome)'}</b></div>
       <div class="jcard-foot"><span class="badge antigo">antigo</span>${waChipHtml(l.telefone)}${nm?`<span class="muted">${nm}</span>`:''}</div>
-      <div class="muted sm" style="margin-top:5px">${orig}${dc?` · ${fmtDate(dc)}`:''}</div>
+      <div class="muted sm" style="margin-top:5px">${orig}${l.data_chegada?` · ${dtShort(l.data_chegada)}`:''}</div>
     </div>`;
   };
   const antBody=antigos.length?antigos.map(antCard).join(''):'<p class="muted sm">nenhum lead antigo pendente</p>';
@@ -902,7 +920,7 @@ function renderJornadaSDR(){
     <div class="ant-tools"><input type="search" id="antBusca" class="lead-busca ant-busca" placeholder="nome, e-mail ou telefone"></div>
     <div class="jcol-body">${antBody}</div>
   </div>`;
-  board.innerHTML=antCol+SDR_ETAPAS.map(E=>{
+  const _etapaCols=SDR_ETAPAS.map(E=>{
     const cs=leads.filter(l=>sdrEtapa(l)===E.k);
     const body=cs.length?cs.map(l=>{
       const sdrName=isMgr?((getUsers().find(u=>u.id===l.sdr_id)||{}).nome||''):'';
@@ -914,10 +932,14 @@ function renderJornadaSDR(){
         <div class="jcard-person">${avatarHtml(l.nome,l.foto_url||l.avatar_url,'avt-sm')}<b class="jopen">${l.nome||'(sem nome)'}</b></div>
         <div class="jcard-foot"><span class="temp ${l.qualificado?'frio':'morno'}">${l.qualificado?'ICP '+(l.icp||'✓'):'a qualificar'}</span>${waChipHtml(l.telefone)}${sdrName?`<span class="muted">${sdrName}</span>`:''}${closerName?`<span class="jclose">Closer: ${closerName}</span>`:''}</div>
         ${fl?`<div class="jflags">${fl}</div>`:''}
-        <div class="muted sm" style="margin-top:5px">${orig}</div>${extra}
+        <div class="muted sm" style="margin-top:5px">${orig}${l.data_chegada?` · ${dtShort(l.data_chegada)}`:''}</div>${extra}
       </div>`;}).join(''):'<p class="muted sm">sem leads</p>';
     return `<div class="jcol" data-sstage="${E.k}"><div class="jcol-head" style="--sc:${E.color}">${E.label} <span>${cs.length}</span></div><div class="jcol-body">${body}</div></div>`;
-  }).join('');
+  });
+  // "Leads Antigos" fica logo à direita da coluna "Compareceu"
+  const _posComp=SDR_ETAPAS.findIndex(E=>E.k==='compareceu');
+  _etapaCols.splice(_posComp>=0?_posComp+1:_etapaCols.length,0,antCol);
+  board.innerHTML=_etapaCols.join('');
   wireJourneyCards(board,'.jcard[data-lid]',card=>openEsteiraLeadModal(card.dataset.lid));
   if(canMove){
     board.querySelectorAll('.jcard[data-lid]').forEach(card=>{
@@ -1505,6 +1527,12 @@ function renderMissing(){
   warn();b.innerHTML=`${ICO_WARN} Não lançaram hoje (${fmtDate(TODAY)}): `+missing.map(u=>`<b>${u.nome} (${ROLES[u.role].label})</b>`).join(', ');
 }
 function fmtDate(d){const[y,m,dd]=d.split('-');return `${dd}/${m}`;}
+// data + hora de chegada do lead (timestamptz UTC no banco -> fuso de Brasília)
+function dtBR(v){ if(!v) return '—'; const d=new Date(v); if(isNaN(d)) return '—';
+  return d.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+// versão curta pro card (dia/mês + hora, sem ano): "03/08 21:08"
+function dtShort(v){ if(!v) return ''; const d=new Date(v); if(isNaN(d)) return '';
+  return d.toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(', ',' '); }
 
 // ---------- ENTRY (lançar dados do dia) ----------
 function renderEntryForm(){
@@ -1676,7 +1704,7 @@ function sdrLeadCard(l){
   return `<div class="sdr-card" data-lead="${l.id}" data-nome="${buscaHay(l)}">
     <div class="sdr-card-head">
       <div><b class="sdr-open" data-open="${l.id}">${l.nome||'(sem nome)'}</b> ${l.icp?`<span class="badge ${l.icp==='A'||l.icp==='B'?'ok':'none'}">ICP ${l.icp}</span>`:(l.qualificado?'<span class="badge ok">ICP</span>':'')}${l.antigo?' <span class="badge antigo">antigo</span>':''}${leadFlagsHtml(l)}</div>
-      <span class="muted sm">${orig}${dc?` · ${fmtDate(dc)}`:''}</span>
+      <span class="muted sm">${orig}${dc?` · ${dtShort(l.data_chegada)}`:''}</span>
     </div>
     ${l.telefone?`<div class="muted sm">${waTelHtml(l.telefone)}</div>`:''}
     <div class="sdr-checks">${sdrChecksHTML(l)}</div>
@@ -1831,12 +1859,30 @@ async function salvarAgendamento(id){
 // Ficha: respostas que o lead deu no formulário (multi-step SE / Forms V5), quando existirem.
 function fichaRespHtml(l){
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const rows=[['Cargo',l.map_perfil],['Empreendimento',l.map_terreno],['O que trava',l.map_travamento],
-    ['Urgência',l.map_quando],['Capital',l.map_capital],['Momento / VGV',l.map_obs]]
+  // map_obs junta "Momento: X · VGV: Y" (e às vezes Renda/Instagram). Separo aqui pra cada pergunta virar 1 linha.
+  const obs={};
+  String(l.map_obs||'').split(' · ').forEach(p=>{
+    const i=p.indexOf(': ');
+    if(i>0){ obs[p.slice(0,i).trim().toLowerCase()]=p.slice(i+2).trim(); }
+    else if(p.trim()){ obs.obs=(obs.obs?obs.obs+' · ':'')+p.trim(); }
+  });
+  const extras=Object.entries(obs).filter(([k])=>k!=='momento'&&k!=='vgv'&&k!=='melhor horário')
+    .map(([k,v])=>[k.charAt(0).toUpperCase()+k.slice(1),v]);
+  // Texto completo das perguntas do Forms V5/V6, 1 linha cada
+  const rows=[
+    ['Qual seu cargo / função hoje?', l.map_perfil],
+    ['Você tem algum empreendimento em mãos hoje?', l.map_terreno],
+    ['Qual é o seu momento atual?', obs.momento],
+    ['O que mais te trava hoje?', l.map_travamento],
+    ['Qual a sua urgência pra resolver isso?', l.map_quando],
+    ['Qual o VGV estimado do seu próximo projeto?', obs.vgv],
+    ['Quanto de capital próprio você tem hoje pra investir?', l.map_capital],
+    ['Em caso de selecionado, qual o melhor horário pra te ligarmos?', obs['melhor horário']],
+    ...extras]
     .filter(r=>String(r[1]||'').trim());
   if(!rows.length) return '';
   return `<div class="ml-move"><span class="ml-lbl">Respostas do formulário</span>
-    <div class="ml-grid">${rows.map(r=>`<div class="ml-row"><span>${r[0]}</span><b>${esc(r[1])}</b></div>`).join('')}</div></div>`;
+    <div class="ml-grid">${rows.map(r=>`<div class="ml-row"><span>${esc(r[0])}</span><b>${esc(r[1])}</b></div>`).join('')}</div></div>`;
 }
 
 // Modal de detalhe do lead (esteira) — abre ao clicar no nome na Jornada ou na worklist
@@ -1864,8 +1910,9 @@ function openEsteiraLeadModal(id){
     <div class="ml-grid">
       <div class="ml-item"><span class="ml-chip-label">Origem</span><strong>${escHtml(orig)}</strong></div>
       <div class="ml-item"><span class="ml-chip-label">ICP</span><strong>${l.icp?('ICP '+escHtml(l.icp)):(l.qualificado?'Qualificado':'—')}</strong></div>
-      <div class="ml-item ml-item-action"><span class="ml-chip-label">WhatsApp</span><strong>${l.telefone?waTelHtml(l.telefone):'—'}</strong></div>
+      <div class="ml-item ml-item-action"><span class="ml-chip-label">WhatsApp</span><strong>${l.telefone?waTelHtml(l.telefone):'—'}</strong>${l.telefone?`<button type="button" class="ml-copy" data-copy="${waNumber(l.telefone)}" title="Copiar número do WhatsApp" style="margin-left:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:inherit;border-radius:7px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit">Copiar</button>`:''}</div>
       <div class="ml-item"><span class="ml-chip-label">E-mail</span><strong>${escHtml(l.email||'—')}</strong></div>
+      <div class="ml-item"><span class="ml-chip-label">Chegou em</span><strong>${dtBR(l.data_chegada)}</strong></div>
       ${l.agendado_em?`<div class="ml-item"><span class="ml-chip-label">Call marcada</span><strong>${fmtDate(l.agendado_em)}${l.agendado_hora?` · ${l.agendado_hora}`:''}</strong></div>`:''}
       ${me.role==='gestor'?`<div class="ml-item"><span class="ml-chip-label">SDR</span><strong>${escHtml(sdrName)}</strong></div>`:''}
     </div>
@@ -1875,6 +1922,7 @@ function openEsteiraLeadModal(id){
   m.hidden=false;
   const close=()=>{ MODAL_LEAD=null; closeModal(); };
   $('#mClose').onclick=close; m.onclick=e=>{ if(e.target===m) close(); };
+  m.querySelectorAll('.ml-copy').forEach(b=>b.onclick=function(e){e.stopPropagation();var n=b.getAttribute('data-copy')||'';var done=function(){var o=b.textContent;b.textContent='Copiado ✓';setTimeout(function(){b.textContent=o;},1400);};var fb=function(){try{var t=document.createElement('textarea');t.value=n;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);done();}catch(_){}};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(n).then(done).catch(fb);}else fb();});
   if(isCloser){ wireCloserControls(m); }
   else{
     m.querySelectorAll('[data-mv]').forEach(b=>b.onclick=()=>moverLeadSDR(l.id,b.dataset.mv));
@@ -2160,6 +2208,8 @@ function initNav(){
   if(mp){ mp.onchange=()=>{ if(mp.value){calMonth=mp.value;renderCalendar();} };
     $('#calLabel').onclick=()=>{ try{mp.showPicker();}catch(e){mp.focus();} }; }
   $('#logoutBtn').onclick=logout;
+  const snd=$('#sndToggle');
+  if(snd){ const ic=snd.querySelector('.snd-ico'); if(ic) ic.textContent=SOUND_ON?'🔔':'🔕'; snd.classList.toggle('is-off',!SOUND_ON); snd.onclick=toggleLeadSound; }
 }
 function shiftMonth(ym,delta){let[y,m]=ym.split('-').map(Number);m+=delta;if(m<1){m=12;y--}if(m>12){m=1;y++}return `${y}-${String(m).padStart(2,'0')}`;}
 
@@ -2206,4 +2256,47 @@ function initSidebar(){
 setInterval(()=>{ try{
   if($('#app') && !$('#app').hidden && $('#funnelPicker') && typeof renderFunil==='function') renderFunil();
 }catch(e){} }, 60_000);
+
+// ---------- LEADS EM TEMPO REAL: atualiza contador+lista e avisa (som+notificação) quando entra lead ----------
+function leadBeep(){ try{
+  if(!_audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; _audioCtx=new AC(); }
+  if(_audioCtx.state==='suspended') _audioCtx.resume();
+  const t=_audioCtx.currentTime;
+  [880,1320].forEach((f,i)=>{ const o=_audioCtx.createOscillator(),g=_audioCtx.createGain();
+    o.type='sine'; o.frequency.value=f; o.connect(g); g.connect(_audioCtx.destination);
+    const s=t+i*0.18; g.gain.setValueAtTime(0.0001,s); g.gain.exponentialRampToValueAtTime(0.35,s+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,s+0.16); o.start(s); o.stop(s+0.17); });
+}catch(e){} }
+function leadNotify(n,nome){ try{
+  if('Notification' in window && Notification.permission==='granted'){
+    const title = n>1 ? `${n} novos leads chegaram` : `Novo lead: ${nome||'sem nome'}`;
+    new Notification(title, {body:'Clique pra abrir o dashboard e trabalhar.', tag:'novo-lead', renotify:true});
+  }
+}catch(e){} }
+function toggleLeadSound(){
+  SOUND_ON=!SOUND_ON; try{ localStorage.setItem('dc_leadSound', SOUND_ON?'1':'0'); }catch(e){}
+  const b=document.getElementById('sndToggle'); if(b){ const ic=b.querySelector('.snd-ico'); if(ic) ic.textContent=SOUND_ON?'🔔':'🔕'; b.classList.toggle('is-off',!SOUND_ON); }
+  if(!SOUND_ON) return;
+  try{ const AC=window.AudioContext||window.webkitAudioContext; if(AC){ _audioCtx=_audioCtx||new AC(); _audioCtx.resume(); } leadBeep(); }catch(e){}
+  if(!('Notification' in window)){ alert('Seu navegador não suporta notificações. O som vai tocar mesmo assim.'); return; }
+  const fireTest=()=>{ try{ new Notification('Notificação ativada ✅', {body:'Você será avisado aqui quando entrar um lead novo.', tag:'novo-lead'}); }catch(e){} };
+  if(Notification.permission==='granted') fireTest();
+  else if(Notification.permission==='denied') alert('As notificações estão BLOQUEADAS para este site no navegador.\n\nComo liberar:\n1) Clique no cadeado (à esquerda do endereço do site).\n2) Em "Notificações", troque para "Permitir".\n3) Recarregue a página e clique no sino de novo.\n\n(O som continua funcionando de qualquer forma.)');
+  else Notification.requestPermission().then(p=>{ if(p==='granted') fireTest(); });
+}
+async function pollLeadsRT(){ try{
+  const appEl=document.getElementById('app'); if(!appEl || appEl.hidden) return;
+  if(typeof curUser!=='function' || !curUser()) return;
+  // dispara o sync RÁPIDO (planilha -> banco) antes de reler, pra o lead cair em segundos
+  try{ await fetch('https://steio.vercel.app/api/dc-leads-sync?fast=1',{cache:'no-store'}); }catch(e){}
+  _pollCount++; await loadEsteira(_pollCount%48!==0);   // incremental; reconcilia tudo a cada ~20 min
+  const mine=(myLeads()||[]).map(l=>String(l.id));
+  if(_seenLeadIds){
+    const novos=mine.filter(id=>!_seenLeadIds.has(id));
+    if(novos.length){ if(SOUND_ON) leadBeep(); const f=(ESTEIRA||[]).find(l=>String(l.id)===novos[0]); leadNotify(novos.length, f&&f.nome); refreshLeadViews(); }
+    else if(mine.length!==_seenLeadIds.size){ refreshLeadViews(); }   // alguém saiu da lista: atualiza contador
+  }
+  _seenLeadIds=new Set(mine);
+}catch(e){} }
+setInterval(pollLeadsRT, 25_000);
 })();

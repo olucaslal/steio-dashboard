@@ -1,5 +1,7 @@
 .vercel
 node_modules
 .DS_Store
-
-.vercel
+*token*
+.vercel-token-launchesdot.txt
+.env
+.env.*
